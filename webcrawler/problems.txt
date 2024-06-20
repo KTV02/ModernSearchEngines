@@ -1,0 +1,3 @@
+Problems:
+language detection (partially english /german)
+ip blocking von z.B. wikipedia =>cdn?
