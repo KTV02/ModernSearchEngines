@@ -1,3 +1,4 @@
 Problems:
 language detection (partially english /german)
+how do we exfiltrate the content and save the content
 ip blocking von z.B. wikipedia =>cdn?
