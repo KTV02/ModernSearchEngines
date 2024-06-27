@@ -20,3 +20,12 @@ language detection (partially english /german)
     - Add all outgoing absolute links to frontier first
     - Do filtering after making request and parsing HTML
     - Problem: Explodes frontier and possibly index
+
+
+- Option C: Extended Hard string matching
+    -Collect a baseline using hard matching with e.g. Tuebingen
+    -On this baseline do some NLP to find relevant keywords related to english content about tübingen
+    -Use these keywords for extended hardmatching for the webcrawler for the final dataset
+    (In theory we could use a loooooot of keywords, comparing the URL to even 1000+ keyword strings should not affect performance)
+    - This option still has the issue that we already preselect what our ranker can even rank as relevant, but because 
+      we can not create our index on the whole internet, some sort of preselection is needed
