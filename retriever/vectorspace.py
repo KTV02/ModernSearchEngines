@@ -1,14 +1,6 @@
 """
-Vector Space Model (sklearn vectorizer) based on TF-IDF
-
-The Vector Space Model represents documents and terms as vectors in a multi-dimensional space. 
-Each dimension corresponds to a unique term in the entire corpus of documents.
+Vector Space Model based on TF-IDF
 """
-
-# document metadata
-# Parametric indices for numbers
-# Standard inverted indices for each text column => merge into a shared inverted index (zones in postings)
-# Naive way:  Single term query: in the more zones it is the higher it gets scored
 import math
 from nltk.tokenize import TreebankWordTokenizer
 from nltk.corpus import stopwords
@@ -22,20 +14,29 @@ class VectorSpaceModel:
         self.documents = []
         self.vocab = set()
         self.stop_words = set(stopwords.words('english'))
-        self.tokenizer = TreebankWordTokenizer()
+        self.tokenizer = TreebankWordTokenizer() # Can we use that?
 
     def tokenize(self, doc):
+        """
+        Tokenize using defined tokenizer in class.
+        """
         tokens = self.tokenizer.tokenize(doc.lower())
         return [token for token in tokens if token not in self.stop_words]
 
     def add_document(self, doc_id, text):
+        """
+        Adds document to index.
+        """
         self.documents.append((doc_id, text))
-    
-    def _build_vocab(self):
+
+    def build_vocab(self):
+        """
+        Tokenize vocab in index.
+        """
         for doc_id, text in self.documents:
             tokens = self.tokenize(text)
             self.vocab.update(tokens)
-    
+
     def _create_word_dicts(self):
         word_dicts = []
         for doc_id, text in self.documents:
@@ -47,6 +48,9 @@ class VectorSpaceModel:
         return word_dicts
 
     def compute_tf(self, word_dict, bow):
+        """
+        Compute Term-Frequency.
+        """
         tf_dict = {}
         bow_count = len(bow)
         for word, count in word_dict.items():
@@ -54,6 +58,9 @@ class VectorSpaceModel:
         return tf_dict
 
     def compute_idf(self, doc_list):
+        """
+        Compute Inverse Document Frequency.
+        """
         idf_dict = dict.fromkeys(doc_list[0].keys(), 0)
         N = len(doc_list)
         for doc in doc_list:
@@ -65,12 +72,18 @@ class VectorSpaceModel:
         return idf_dict
 
     def compute_tfidf(self, tf_bow, idfs):
+        """
+        Compute TF-IDF
+        """
         tfidf = {}
         for word, val in tf_bow.items():
             tfidf[word] = val * idfs.get(word, 0)
         return tfidf
 
     def query(self, query_text):
+        """
+        Query the index using a query_text, e.g. normal search words.
+        """
         query_tokens = self.tokenize(query_text)
         query_dict = dict.fromkeys(self.vocab, 0)
         for token in query_tokens:
@@ -107,7 +120,7 @@ vsm.add_document(3, "Steve Jobs was the co-founder of Apple")
 vsm.add_document(4, "Artificial Intelligence is transforming many industries")
 
 # Build vocabulary
-vsm._build_vocab()
+vsm.build_vocab()
 
 # Query the model
 query_text = "Tesla innovation"
