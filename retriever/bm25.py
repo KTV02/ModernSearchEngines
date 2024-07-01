@@ -2,17 +2,17 @@
 Implement BM25 (BM25L or BM25+) with parallelization. 
 """
 import math
-import numpy as np
+from typing import List, Dict, Callable, Union
 from collections import Counter
+import numpy as np
 from tqdm.auto import tqdm
 import scipy.sparse as sp
 from multiprocessing import Pool
-from typing import List, Dict, Callable, Union
 
 class BM25S:
     def __init__(self, corpus, k1=1.5, b=0.75, delta=1.0, method="bm25+", num_threads=4):
         """
-        Initialize BM25S with the given corpus and parameters.
+        Initialize BM25S with the given corpuses and parameters.
 
         Parameters:
         - corpus: List of documents, where each document is a list of terms.
@@ -79,7 +79,7 @@ class BM25S:
         den = k1 * (1 - b + b * l_d / l_avg) + tf_array
         return (num / den) + delta
 
-    def _score_idf_bm25plus(self, df, N):
+    def _score_idf_bm25plus(self, df, num_documents):
         """
         Computes the inverse document frequency component of the BM25 score using BM25+ variant.
         
@@ -90,7 +90,7 @@ class BM25S:
         Returns:
         - idf: Inverse document frequency for the token.
         """
-        return math.log((N + 1) / df)
+        return math.log((num_documents + 1) / df)
 
     def _score_tfc_bm25l(self, tf_array, l_d, l_avg, k1, b, delta):
         """
@@ -110,7 +110,7 @@ class BM25S:
         c_array = tf_array / (1 - b + b * l_d / l_avg)
         return ((k1 + 1) * (c_array + delta)) / (k1 + c_array + delta)
 
-    def _score_idf_bm25l(self, df, N):
+    def _score_idf_bm25l(self, df, num_documents):
         """
         Computes the inverse document frequency component of the BM25 score using BM25L variant.
         
@@ -121,7 +121,7 @@ class BM25S:
         Returns:
         - idf: Inverse document frequency for the token.
         """
-        return math.log((N + 1) / (df + 0.5))
+        return math.log((num_documents + 1) / (df + 0.5))
 
     def _select_tfc_scorer(self, method) -> Callable:
         """
@@ -170,7 +170,8 @@ class BM25S:
         doc_indices = list(range(self.N))
         if self.num_threads > 1:
             with Pool(self.num_threads) as pool:
-                results = pool.starmap(self._parallel_score, [(query, doc_indices[i::self.num_threads]) for i in range(self.num_threads)])
+                results = pool.starmap(self._parallel_score, 
+                                       [(query, doc_indices[i::self.num_threads]) for i in range(self.num_threads)])
                 scores = [score for sublist in results for score in sublist]
         else:
             scores = self._parallel_score(query, doc_indices)
@@ -219,8 +220,9 @@ class BM25S:
                 if freq == 0:
                     continue
 
-                idf = idf_scorer(df=self.tf[:, word_idx].sum(), N=self.N)
-                tfc = tfc_scorer(tf_array=freq, l_d=doc_len, l_avg=self.avgdl, k1=self.k1, b=self.b, delta=self.delta)
+                idf = idf_scorer(df=self.tf[:, word_idx].sum(), num_documents=self.N)
+                tfc = tfc_scorer(tf_array=freq, l_d=doc_len, l_avg=self.avgdl, 
+                                 k1=self.k1, b=self.b, delta=self.delta)
 
                 score += idf * tfc
 
@@ -235,7 +237,8 @@ if __name__ == "__main__":
         ["lorem", "ipsum", "dolor", "sit", "amet"],
         ["hello", "foo"]
     ]
-    bm25 = BM25S(corpus, num_threads=4, method="bm25l")
-    query = ["hello", "foo"]
+    bm25 = BM25S(corpus, num_threads=4, method="bm25+")
+    query = ["hello", "foo", "ablenkung", "andereAblenkung"]
     scores = bm25.get_scores(query)
     print(scores)
+
