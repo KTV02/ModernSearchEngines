@@ -80,6 +80,7 @@ class VectorSpaceModel:
         tf_docs = [self.compute_tf(word_dict, self.tokenize(text)) 
                    for word_dict, (doc_id, text) in zip(word_dicts, self.documents)]
         idfs = self.compute_idf(word_dicts)
+         # Compute TF-IDF vectors for each document: Document-at-a-Time
         tfidf_docs = [self.compute_tfidf(tf, idfs) for tf in tf_docs]
 
         query_tf = self.compute_tf(query_dict, query_tokens)
