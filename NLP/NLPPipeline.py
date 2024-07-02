@@ -1,17 +1,69 @@
 import numpy as np
 import nltk
 import string
+import requests
 from langdetect import detect
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk import pos_tag
 from nltk.stem import WordNetLemmatizer
+from bs4 import BeautifulSoup
+from readability import Document
 
 # Ensure necessary NLTK data is downloaded
 nltk.download('punkt')
 nltk.download('stopwords')
 nltk.download('averaged_perceptron_tagger')
 nltk.download('wordnet')
+
+
+def clean_html_content(html_content):
+    try:
+        # Use Readability to extract the main content
+        doc = Document(html_content)
+        main_content_html = doc.summary()
+        title = doc.title()
+
+        # Parse the main content HTML using BeautifulSoup
+        soup = BeautifulSoup(main_content_html, 'html.parser')
+
+        # Remove unwanted elements
+        for tag in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']):
+            tag.decompose()
+
+        # Get cleaned content
+        cleaned_content = ' '.join(soup.stripped_strings)
+
+        return {
+            'title': title,
+            'cleaned_content': cleaned_content
+        }
+
+    except Exception as e:
+        print(f"Error while cleaning content: {e}")
+        return {
+            'title': None,
+            'cleaned_content': None
+        }
+
+
+def crawl_page(url):
+    try:
+        response = requests.get(url, timeout=10)  # Fetch the web page
+        if response.status_code != 200:
+            print(f"Failed to retrieve the page. Status code: {response.status_code}")
+            return None
+
+        cleaned_data = clean_html_content(response.text)
+        print(f"Title: {cleaned_data['title']}")
+        print(f"Cleaned Content: {cleaned_data['cleaned_content']}")
+
+    except requests.RequestException as e:
+        print(f"Request exception encountered at {url}: {e}")
+        return None
+    except Exception as e:
+        print(f"Unexpected exception encountered at {url}: {e}")
+        return None
 
 def detect_language(text):
     """Detect the language of the given text."""
@@ -68,3 +120,5 @@ if __name__ == "__main__":
     # Lemmatization
     lemmatized_tokens = lemmatize_tokens(filtered_tokens)
     print("Lemmatized Tokens:", lemmatized_tokens)
+
+    print(crawl_page("https://www.tuebingen.de/en/"))
