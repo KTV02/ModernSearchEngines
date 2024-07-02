@@ -17,7 +17,7 @@ nltk.download('wordnet')
 conn = sqlite3.connect('index.db')
 cursor = conn.cursor()
 
-# Fetch content from the documents table
+# Fetch urls from the documents table
 cursor.execute("SELECT content FROM documents")
 rows = cursor.fetchall()
 
