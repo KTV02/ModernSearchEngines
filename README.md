@@ -12,19 +12,35 @@
 6. Allow the first and last options (sending and receiving):
    ![Allow Options](readme/readme3.png)
 7. Send the invitation AND TELL ME! I need to accept this invitation.
-8. Now you can see the IP address of the server under the tab "External Devices".
+8. Now you can see the IP address / hostname of the server under the tab "External Devices".
    ![IP_Adress](readme/readme4.png)
 
 
-## Use the IP Address to send requests to database
+## Use the IP Address or Hostname to send requests to database
+Its best to use the hostname, because this will stay the same for every team member 
 
 ```python
 import requests
 
-# Use the IP address displayed in NordVPN meshnet
-url = 'http://100.113.220.63:5000/query'
-query = 'SELECT * FROM documents LIMIT 10'
+# Use the internal IP address of your Raspberry Pi
+url = 'http://l.kremp-everest.nord:5000/query'
+query = 'SELECT COUNT(*) AS count FROM documents'
 
-response = requests.post(url, json={'query': query})
-data = response.json()
-print(data)
+# Basic authentication details
+auth = ('mseproject', 'tuebingen2024')
+
+# Make the POST request to the Flask API with the query
+response = requests.post(url, json={'query': query}, auth=auth)
+
+# Check if the request was successful
+if response.status_code == 200:
+    # Parse the JSON response
+    data = response.json()
+    if data:
+        count = data[0]['count']
+        print(f"Total documents count: {count}")
+    else:
+        print("No data returned.")
+else:
+    print(f"Error executing query: {response.status_code} - {response.text}")
+
