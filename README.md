@@ -3,7 +3,7 @@
 ## Steps to Setup Meshnet
 
 1. Create a free NordVPN Account [here](https://nordvpn.com) (you don't even need the 30-day free trial, you just need the free account).
-2. Download the app on the PC you want to use (For Linux, there is also a CLI version).
+2. [Download](https://nordvpn.com/download/) the app on the device you want to use (For Linux, there is also a CLI version).
 3. Enable Meshnet:
    ![Enable Meshnet](readme/readme1.png)
 4. Click on External Device > Link External Device:
