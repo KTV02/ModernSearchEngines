@@ -11,7 +11,7 @@
 5. Enter email address: l.kremp@gmx.de
 6. Allow the first and last options (sending and receiving):
    ![Allow Options](readme/readme3.png)
-7. Send the invitation.
+7. Send the invitation AND TELL ME! I need to accept this invitation.
 8. Now you can see the IP address of the server under the tab "External Devices".
    ![IP_Adress](readme/readme4.png)
 
