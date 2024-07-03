@@ -10,7 +10,7 @@
    ![Link External Device](readme/readme2.png)
 5. Enter email address: [email address]
 6. Allow the first and last options (sending and receiving):
-7. Send the invitation.
+7. Send the invitation AND TELL ME! I need to accept this invitation.
 8. Now you can see the IP address of the server under the tab "External Devices".
 
 
