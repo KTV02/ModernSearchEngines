@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 import re
 
 # define globals
-API_URL = "l.kremp-everest.nord:5000"  # Replace with your Flask API URL
+API_URL = "http://l.kremp-everest.nord:5000"  # Replace with your Flask API URL
 NUM_WORKERS = 10
 FILTER_CONTENT = True
 TIMEOUT = 15
@@ -183,6 +183,28 @@ def crawl(api_url):
                     params = (url,)
                     execute_query(api_url, query, params)
                     pbar.update(1)
+
+
+def is_relevant_content(text, keywords, threshold=0.05):
+    '''
+    Use this method to determine if new webpage is relevant and
+    if the webcrawler should continue crawling from it
+    :param text: Content of the webpage
+    :param keywords: Keywords determined by e.g. Tfidf to represent english content related to tuebingen
+    :param threshold: We have to tune this once we have the keywords
+    :return: if webpage is pseudo-relevant (based on cheap techniques like TF-IDF => real relevance calc. in retrieval)
+    '''
+    # Preprocess the text
+    processed_text = preprocess(text)
+    word_count = len(processed_text.split())
+    
+    # Count keyword occurrences
+    keyword_hits = sum(processed_text.count(keyword) for keyword in keywords)
+    
+    # Calculate relevance score
+    relevance_score = keyword_hits / word_count
+    
+    return relevance_score >= threshold
 
 def main():
     try:
