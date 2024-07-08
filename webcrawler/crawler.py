@@ -1,3 +1,4 @@
+# This Python file uses the following encoding: utf-8
 import requests
 from bs4 import BeautifulSoup
 import datetime
@@ -12,7 +13,7 @@ API_URL = "http://l.kremp-everest.nord:5000"  # Replace with your Flask API URL
 NUM_WORKERS = 10
 FILTER_CONTENT = True
 TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 't%c3%bcbingen']
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 't%c3%bcbingen','university','uni','international','faculty','students','study','studies','student','excellence','science','course','teaching','research','office','learning','administration','education','strategy','alma','portal','information','german','semester','school','development','institutes','institute','language','eberhard','karls','computer','phd','ilias']
 
 ### --- DATABASE HELPER FUNCTIONS --- ###
 
@@ -110,7 +111,7 @@ def get_links(url, keywords=None):
     
     return external_links, internal_links
 
-def crawl_page(url):
+def crawl_page(url, keywords=None):
     try:
         response = requests.get(url, timeout=TIMEOUT)  # Fetch the web page
         if response.status_code != 200:
@@ -120,9 +121,9 @@ def crawl_page(url):
         title = soup.title.string if soup.title else "N/A"
         content = ' '.join(soup.stripped_strings)  # Using stripped_strings to clean up the text
 
-        # Filter out pages that do not contain "tuebingen" in their content or are not in English
-        if FILTER_CONTENT:
-            if not any(word in content.lower() for word in ['tübingen', 'tubingen', 'tuebingen']):
+        # Filter out pages that do not contain relevant keywords in their content or are not in English
+        if FILTER_CONTENT and keywords:
+            if not any(word in content.lower() for word in keywords):
                 return None
 
             try:
@@ -130,14 +131,14 @@ def crawl_page(url):
                     return None
             except LangDetectException:
                 return None
-
-        ext_links, int_links = get_links(url, keywords=TUEBINGEN_KEYWORDS)
+        #CHANGED: URL is not being keyword filtered anymore => now only content is checked
+        ext_links, int_links = get_links(url)
 
         doc = {
             'url': url,
             'title': title,
             'content': content,
-            'outgoing_links': list(set(ext_links + int_links)),
+            'outgoing_links': list(ext_links | int_links),  # Using union operator to combine lists instead of "+"
             'timestamp': datetime.datetime.now().isoformat()
         }
 
@@ -165,7 +166,7 @@ def crawl(api_url):
                 break
 
             with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
-                results = executor.map(lambda url: crawl_page(url), urls)
+                results = executor.map(lambda url: crawl_page(url,TUEBINGEN_KEYWORDS), urls)
 
             for url, doc in zip(urls, results):
                 if doc:
