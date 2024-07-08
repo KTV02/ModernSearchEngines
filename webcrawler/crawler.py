@@ -1,39 +1,45 @@
-import sqlite3
+# This Python file uses the following encoding: utf-8
 import requests
 from bs4 import BeautifulSoup
 import datetime
 from langdetect import detect, LangDetectException
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urljoin, urlparse, urlsplit
-from urllib.request import urlopen
+from urllib.parse import urljoin, urlparse
 import re
 
 # define globals
-DB_NAME = "index.db"
+API_URL = "http://l.kremp-everest.nord:5000"  # Replace with your Flask API URL
 NUM_WORKERS = 10
 FILTER_CONTENT = True
 TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 't%c3%bcbingen']
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 't%c3%bcbingen','university','uni','international','faculty','students','study','studies','student','excellence','science','course','teaching','research','office','learning','administration','education','strategy','alma','portal','information','german','semester','school','development','institutes','institute','language','eberhard','karls','computer','phd','ilias']
 
 ### --- DATABASE HELPER FUNCTIONS --- ###
 
-def setup_database(db_name=DB_NAME, drop_existing=False):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
+def execute_query(api_url, query, params=None):
+    url = f"{api_url}/query"
+    payload = {'query': query}
+    if params:
+        payload['params'] = params
+    response = requests.post(url, json=payload, auth=('mseproject', 'tuebingen2024'))
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("Error executing query:", response.text)
+        return None
 
-    # option to reset the database
+def setup_database(api_url, drop_existing=False):
     if drop_existing:
-        cursor.execute("DROP TABLE IF EXISTS frontier")
-        cursor.execute("DROP TABLE IF EXISTS documents")
-        cursor.execute("DROP TABLE IF EXISTS incoming_links")
+        execute_query(api_url, "DROP TABLE IF EXISTS frontier")
+        execute_query(api_url, "DROP TABLE IF EXISTS documents")
 
-    cursor.execute('''
+    execute_query(api_url, '''
     CREATE TABLE IF NOT EXISTS frontier (
         url TEXT PRIMARY KEY,
         crawled INTEGER DEFAULT 0
     )''')
-    cursor.execute('''
+    execute_query(api_url, '''
     CREATE TABLE IF NOT EXISTS documents (
         url TEXT PRIMARY KEY,
         title TEXT,
@@ -41,39 +47,38 @@ def setup_database(db_name=DB_NAME, drop_existing=False):
         outgoing_links TEXT,
         timestamp TEXT
     )''')
-    conn.commit()
-    conn.close()
+    print("Database setup completed.")
 
-
-def index_doc(doc, index_path):
-    conn = sqlite3.connect(index_path)
-    cursor = conn.cursor()
-    cursor.execute('''
+def index_doc(doc, api_url):
+    query = '''
     INSERT OR IGNORE INTO documents (url, title, content, outgoing_links, timestamp)
     VALUES (?, ?, ?, ?, ?)
-    ''', (doc['url'], doc['title'], doc['content'], ','.join(doc['outgoing_links']), doc['timestamp']))
-    conn.commit()
+    '''
+    params = (doc['url'], doc['title'], doc['content'], ','.join(doc['outgoing_links']), doc['timestamp'])
+    execute_query(api_url, query, params)
+    print(f"Document indexed: {doc['url']}")
 
+def count_remaining_frontier(api_url):
+    query = "SELECT count(*) AS count FROM frontier WHERE crawled = 0"
+    result = execute_query(api_url, query)
+    print("Count remaining frontier result:", result)
+    if result:
+        return result[0]['count']
+    return 0
 
-def count_remaining_frontier(db_name=DB_NAME):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
+def get_total_indexed_docs(api_url):
+    query = "SELECT count(*) AS count FROM documents"
+    result = execute_query(api_url, query)
+    if result:
+        return result[0]['count']
+    return 0
 
-    cursor.execute("SELECT count(*) FROM frontier WHERE crawled = 0")
-    total_count = cursor.fetchone()
-    conn.close()
-
-    return total_count[0]
-
-def get_total_indexed_docs(db_name=DB_NAME):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT count(*) FROM documents")
-    index_tot = cursor.fetchone()
-    conn.close()
-
-    return index_tot[0]
+def initialize_frontier(initial_urls, api_url):
+    for url in initial_urls:
+        query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
+        params = (url,)
+        execute_query(api_url, query, params)
+    print("Frontier initialized.")
 
 ### --- CRAWLER FUNCTIONS --- ###
 
@@ -106,10 +111,8 @@ def get_links(url, keywords=None):
     
     return external_links, internal_links
 
-
-def crawl_page(url):
+def crawl_page(url, keywords=None):
     try:
-
         response = requests.get(url, timeout=TIMEOUT)  # Fetch the web page
         if response.status_code != 200:
             return None
@@ -118,9 +121,9 @@ def crawl_page(url):
         title = soup.title.string if soup.title else "N/A"
         content = ' '.join(soup.stripped_strings)  # Using stripped_strings to clean up the text
 
-        # Filter out pages that do not contain "tuebingen" in their content or are not in English
-        if FILTER_CONTENT:
-            if not any(word in content.lower() for word in ['tübingen', 'tubingen', 'tuebingen']):
+        # Filter out pages that do not contain relevant keywords in their content or are not in English
+        if FILTER_CONTENT and keywords:
+            if not any(word in content.lower() for word in keywords):
                 return None
 
             try:
@@ -128,14 +131,14 @@ def crawl_page(url):
                     return None
             except LangDetectException:
                 return None
-
-        ext_links, int_links = get_links(url, keywords=TUEBINGEN_KEYWORDS)
+        #CHANGED: URL is not being keyword filtered anymore => now only content is checked
+        ext_links, int_links = get_links(url)
 
         doc = {
             'url': url,
             'title': title,
             'content': content,
-            'outgoing_links': list(set(ext_links + int_links)),
+            'outgoing_links': list(ext_links | int_links),  # Using union operator to combine lists instead of "+"
             'timestamp': datetime.datetime.now().isoformat()
         }
 
@@ -148,115 +151,78 @@ def crawl_page(url):
 
     return doc
 
-def crawl(index_path):
-    conn = sqlite3.connect(index_path)
-    cursor = conn.cursor()
-
-    # Calculate total number of URLs to be crawled
-    cursor.execute("SELECT COUNT(*) FROM frontier WHERE crawled = 0")
-    total_to_crawl = cursor.fetchone()[0]
+def crawl(api_url):
+    total_to_crawl = count_remaining_frontier(api_url)
 
     with tqdm(total=total_to_crawl, desc="Crawling Progress", unit="page") as pbar:
         while True:
-            cursor.execute("SELECT url FROM frontier WHERE crawled = 0 LIMIT 10")
-            rows = cursor.fetchall()
-            if not rows:
+            query = "SELECT url FROM frontier WHERE crawled = 0 LIMIT 10"
+            result = execute_query(api_url, query)
+            if not result:
                 break
 
-            urls = [row[0] for row in rows]
+            urls = [row['url'] for row in result]
+            if not urls:
+                break
+
             with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
-                results = executor.map(lambda url: crawl_page(url), urls)
+                results = executor.map(lambda url: crawl_page(url,TUEBINGEN_KEYWORDS), urls)
 
             for url, doc in zip(urls, results):
-
                 if doc:
-                    for link in doc['outgoing_links']: # Add outgoing links to frontier
-                        cursor.execute("INSERT OR IGNORE INTO frontier (url) VALUES (?)", (link,))
-                        conn.commit()
-
-                    # Mark the URL as crawled
-                    cursor.execute("UPDATE frontier SET crawled = 1 WHERE url = ?", (doc['url'],))
-                    conn.commit()
-
-                    # Index the document if it is not already in the database
-                    cursor.execute("SELECT 1 FROM documents WHERE url = ? LIMIT 1", (doc['url'],))
-                    if cursor.fetchone() is None:
-                        index_doc(doc, index_path)
-                        pbar.update(1)
-
-                else:
-                    # Mark the URL as crawled if it is not a valid document
-                    cursor.execute("UPDATE frontier SET crawled = 1 WHERE url = ?", (url,))
-                    conn.commit()
+                    index_doc(doc, api_url)
+                    for link in doc['outgoing_links']:  # Add outgoing links to frontier
+                        query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
+                        params = (link,)
+                        execute_query(api_url, query, params)
+                    query = "UPDATE frontier SET crawled = 1 WHERE url = ?"
+                    params = (doc['url'],)
+                    execute_query(api_url, query, params)
                     pbar.update(1)
+                else:
+                    query = "UPDATE frontier SET crawled = 1 WHERE url = ?"
+                    params = (url,)
+                    execute_query(api_url, query, params)
+                    pbar.update(1)
+
+
+def is_relevant_content(text, keywords, threshold=0.05):
+    '''
+    Use this method to determine if new webpage is relevant and
+    if the webcrawler should continue crawling from it
+    :param text: Content of the webpage
+    :param keywords: Keywords determined by e.g. Tfidf to represent english content related to tuebingen
+    :param threshold: We have to tune this once we have the keywords
+    :return: if webpage is pseudo-relevant (based on cheap techniques like TF-IDF => real relevance calc. in retrieval)
+    '''
+    # Preprocess the text
+    processed_text = preprocess(text)
+    word_count = len(processed_text.split())
     
-    conn.close()
-
-def initialize_frontier(initial_urls, db_name=DB_NAME):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    for url in initial_urls:
-        cursor.execute("INSERT OR IGNORE INTO frontier (url) VALUES (?)", (url,))
-    conn.commit()
-    conn.close()
-
-    return None
-
-def calculate_incoming_links(db_name=DB_NAME):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-
-    # Create a temporary table to store incoming links
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS incoming_links (
-        url TEXT PRIMARY KEY,
-        incoming_count INTEGER DEFAULT 0
-    )''')
-
-    # Clear any existing data
-    cursor.execute("DELETE FROM incoming_links")
-
-    # Retrieve all documents and their outgoing links
-    cursor.execute("SELECT url, outgoing_links FROM documents")
-    rows = cursor.fetchall()
-
-    for row in rows:
-        url, outgoing_links = row
-        outgoing_links_list = outgoing_links.split(',')
-
-        for link in outgoing_links_list:
-            cursor.execute('''
-            INSERT INTO incoming_links (url, incoming_count)
-            VALUES (?, 1)
-            ON CONFLICT(url) DO UPDATE SET incoming_count = incoming_count + 1
-            ''', (link,))
-
-    conn.commit()
-    conn.close()
+    # Count keyword occurrences
+    keyword_hits = sum(processed_text.count(keyword) for keyword in keywords)
+    
+    # Calculate relevance score
+    relevance_score = keyword_hits / word_count
+    
+    return relevance_score >= threshold
 
 def main():
-
     try:
-        setup_database(drop_existing=False)
-        initialize_frontier(initial_urls + additional_urls) 
-        crawl(DB_NAME)
-        calculate_incoming_links()
+        setup_database(API_URL, drop_existing=False)
+        initialize_frontier(initial_urls + additional_urls, API_URL)
+        crawl(API_URL)
 
     except KeyboardInterrupt:
         print("Interrupted. Exiting...")
         
     finally:
-        if 'conn' in locals():
-            conn.close()
-            print("Database connection closed.")
-
         # show number of indexed documents and remaining URLs in the frontier
-        index_tot = get_total_indexed_docs()
-        frontier_tot = count_remaining_frontier()
+        index_tot = get_total_indexed_docs(API_URL)
+        frontier_tot = count_remaining_frontier(API_URL)
 
         print(f"Total indexed documents: {index_tot}")
         print(f"Remaining URLs in frontier: {frontier_tot}")
-
 
 # Setup initial URLs and call main
 initial_urls = [
