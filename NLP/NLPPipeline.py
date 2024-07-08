@@ -2,6 +2,8 @@ import numpy as np
 import nltk
 import string
 import requests
+import json
+import os
 from langdetect import detect
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
@@ -9,13 +11,51 @@ from nltk import pos_tag
 from nltk.stem import WordNetLemmatizer
 from bs4 import BeautifulSoup
 from readability import Document
+from tqdm import tqdm
 
 # Ensure necessary NLTK data is downloaded
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('averaged_perceptron_tagger')
-nltk.download('wordnet')
+#nltk.download('punkt')
+#nltk.download('stopwords')
+#nltk.download('averaged_perceptron_tagger')
+#nltk.download('wordnet')
 
+output_file_path = 'NLPOutput.txt'
+
+# Function to initialize the file (clear contents)
+def initialize_file(file_path):
+    with open(file_path, 'w') as file:
+        file.write("")  # This clears the file
+
+# Function to append output to the file
+# liste übergeben, sonst wird das lost
+def append_to_file(file_path, text):
+    try:
+        with open(file_path, 'a', encoding='utf-8', errors='replace') as file:
+            #for t in text:
+            file.write(text + "\n")
+    except UnicodeEncodeError as e:
+        print(f"UnicodeEncodeError: {e} for text: {text}")
+
+def getFromDatabase(query):
+    # Here instead of hostname you can also use the ip adresse Displayed in NordVPN
+    url = 'http://l.kremp-everest.nord:5000/query'
+
+    #always rename your parameters if you want to access them via their index in the output
+    # e.g. here COUNT(*) renamed to count
+
+    # Basic authentication details
+    auth = ('mseproject', 'tuebingen2024')
+
+    # Make the POST request to the Flask API with your query
+    response = requests.post(url, json={'query': query}, auth=auth)
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Parse the JSON response
+        data = response.json()
+        return data
+    else:
+        print(f"Error executing query: {response.status_code} - {response.text}")
 
 def clean_html_content(html_content):
     try:
@@ -57,7 +97,7 @@ def crawl_page(url):
         cleaned_data = clean_html_content(response.text)
         print(f"Title: {cleaned_data['title']}")
         print(f"Cleaned Content: {cleaned_data['cleaned_content']}")
-
+        return cleaned_data
     except requests.RequestException as e:
         print(f"Request exception encountered at {url}: {e}")
         return None
@@ -97,28 +137,21 @@ def lemmatize_tokens(tokens):
     lemmatized_tokens = [lemmatizer.lemmatize(token) for token in tokens]
     return lemmatized_tokens
 
+
 # Example usage:
 if __name__ == "__main__":
-    text = "Tübingen (German: [ˈtyːbɪŋən] ⓘ; Swabian: Dibenga) is a traditional university city in central Baden-Württemberg, Germany. It is situated 30 km (19 mi) south of the state capital, Stuttgart, and developed on both sides of the Neckar and Ammer rivers. As of 2014[3] about one in three of the 90,000 people[citation needed] living in Tübingen is a student. As of the 2018/2019 winter semester, 27,665 students attend the Eberhard Karl University of Tübingen.[citation needed] The city has the lowest median age in Germany, in part due to its status as a university city. As of December 31, 2015, the average age of a citizen of Tübingen is 39.1 years."
+    data = getFromDatabase("SELECT * FROM documents LIMIT 10000")
+    print('got documents')
+    initialize_file(output_file_path)
+    for i in tqdm(range(len(data))):
+        text = data[i]['content']
+        language = detect_language(text)
+        tokens = remove_punctuation_and_tokenize(text)
+        filtered_tokens = remove_stop_words(tokens)
+        lemmatized_tokens = lemmatize_tokens(filtered_tokens)
+        #output = (str(i)+'.Language: ' + language + '\n' +
+        output = 'Title: '+ str(data[i]['title'])+ '\n' + 'URL: ' + str(data[i]['url'])+ '\n'+ 'Tokens: ' + ' '.join(lemmatized_tokens) + '\n'
+        append_to_file(output_file_path, output)
 
-    # Language Detection
-    language = detect_language(text)
-    print("Detected Language:", language)
 
-    # Punctuation Removal and Tokenization
-    tokens = remove_punctuation_and_tokenize(text)
-    print("Tokens:", tokens)
 
-    # Stop Word Removal
-    filtered_tokens = remove_stop_words(tokens)
-    print("Filtered Tokens:", filtered_tokens)
-
-    # POS Tagging
-    pos_tags = pos_tagging(filtered_tokens)
-    print("POS Tags:", pos_tags)
-
-    # Lemmatization
-    lemmatized_tokens = lemmatize_tokens(filtered_tokens)
-    print("Lemmatized Tokens:", lemmatized_tokens)
-
-    print(crawl_page("https://www.tuebingen.de/en/"))

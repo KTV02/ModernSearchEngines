@@ -1,2 +1,5 @@
 
 webcrawler/index.db
+
+#ignore txt
+*.txt
