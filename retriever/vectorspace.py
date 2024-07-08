@@ -6,8 +6,10 @@ from nltk.tokenize import TreebankWordTokenizer
 from nltk.corpus import stopwords
 from scipy import spatial
 import nltk
+#TODO: Use NLP functions from NLPPipeline in all rankers
 
-nltk.download('stopwords')
+#Change Note: no need to check everytime, comment in if not istalled
+#nltk.download('stopwords')
 
 class VectorSpaceModel:
     def __init__(self):
@@ -110,23 +112,25 @@ class VectorSpaceModel:
 
         return results
 
-vsm = VectorSpaceModel()
+#Cange Note, made main function, otherwise prints will get called when importing the file
+if __name__ == '__main__':
+    vsm = VectorSpaceModel()
 
-# Add documents
-vsm.add_document(0, "The iPhone revolutionized the mobile phone industry")
-vsm.add_document(1, "Tesla is known for electric cars and innovation")
-vsm.add_document(2, "Elon Musk founded SpaceX and Tesla")
-vsm.add_document(3, "Steve Jobs was the co-founder of Apple")
-vsm.add_document(4, "Artificial Intelligence is transforming many industries")
+    # Add documents
+    vsm.add_document(0, "The iPhone revolutionized the mobile phone industry")
+    vsm.add_document(1, "Tesla is known for electric cars and innovation")
+    vsm.add_document(2, "Elon Musk founded SpaceX and Tesla")
+    vsm.add_document(3, "Steve Jobs was the co-founder of Apple")
+    vsm.add_document(4, "Artificial Intelligence is transforming many industries")
 
-# Build vocabulary
-vsm.build_vocab()
+    # Build vocabulary
+    vsm.build_vocab()
 
-# Query the model
-query_text = "Tesla innovation"
-results = vsm.query(query_text)
+    # Query the model
+    query_text = "Tesla innovation"
+    results = vsm.query(query_text)
 
-# Print results
-print("Query Results for terms '{}':".format(query_text))
-for doc_id, score in results.items():
-    print(f"Document {doc_id} has score {score:.4f}")
+    # Print results
+    print("Query Results for terms '{}':".format(query_text))
+    for doc_id, score in results.items():
+        print(f"Document {doc_id} has score {score:.4f}")
