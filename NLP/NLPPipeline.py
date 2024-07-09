@@ -113,15 +113,18 @@ def detect_language(text):
         return str(e)
 
 def remove_punctuation_and_tokenize(text):
-    """Remove punctuation from the text and tokenize it."""
+    """Remove punctuation from the text, lowercase everything and tokenize it."""
     translator = str.maketrans('', '', string.punctuation)
+    text = text.lower()
     text_no_punct = text.translate(translator)
     tokens = word_tokenize(text_no_punct)
     return tokens
 
 def remove_stop_words(tokens, language='english'):
     """Remove stop words from the list of tokens."""
+    navigation_tokens = {"back", "press", "login", "skip", "next"}
     stop_words = set(stopwords.words(language))
+    stop_words.update(navigation_tokens)
     filtered_tokens = [word for word in tokens if word.lower() not in stop_words]
     return filtered_tokens
 
@@ -140,7 +143,7 @@ def lemmatize_tokens(tokens):
 
 # Example usage:
 if __name__ == "__main__":
-    data = getFromDatabase("SELECT * FROM documents LIMIT 10000")
+    data = getFromDatabase("SELECT * FROM documents")
     print('got documents')
     initialize_file(output_file_path)
     for i in tqdm(range(len(data))):
