@@ -5,7 +5,7 @@ import sys
 import os
 import bm25s
 sys.path.append(os.path.abspath('../retriever'))
-from bm25 import BM25S
+#from bm25 import BM25S
 importlib.reload(kwf)
 
 def get_user_input():
