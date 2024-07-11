@@ -38,13 +38,13 @@ def get_user_input():
 if __name__ == "__main__":
     #Quelle: https://github.com/xhluca/bm25s
     corpus, titles, urls = kwf.parse_tokens("NLPOutput.txt")
-    corpus = [' '.join(tokens) for tokens in corpus]
+    corpusJoined = [' '.join(tokens) for tokens in corpus]
     print('Corpus parsed')
 
     #technically working, not sure how to get the title -> indexes?
     # Create the BM25 model and index the corpus
-    retriever = bm25s.BM25(corpus=corpus)
-    retriever.index(bm25s.tokenize(corpus))
+    retriever = bm25s.BM25(corpus=corpusJoined)
+    retriever.index(corpus)
 
     # Query the corpus and get top-k results
     query = get_user_input()
