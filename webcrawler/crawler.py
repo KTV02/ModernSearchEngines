@@ -13,7 +13,7 @@ API_URL = "http://your-db-host:5000"  # Replace with your Flask API URL
 NUM_WORKERS = 10
 FILTER_CONTENT = True
 TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen','tuebing','tübing', 't%c3%bcbingen','university','uni','eberhard','karls']
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen','tuebing','tübing', 't%c3%bcbingen','eberhard','karls']
 
 ### --- DATABASE HELPER FUNCTIONS --- ###
 
