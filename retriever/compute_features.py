@@ -1,20 +1,25 @@
 import math
+import json
+import re
 from collections import Counter
 from typing import List, Dict
-import pandas as pd
 from nltk.corpus import wordnet
 import nltk
-import re
-import json
 import numpy as np
 
 def tokenize(text):
+    """
+    Example tokens.
+    """
     text = text.lower()
     text = re.sub('[,\.!]', ' ', text)
     text = re.sub('\s+', ' ', text).strip()
     return text.split(' ')
 
 class PrecomputedDocumentFeatures:
+    """
+    Precompute Features for XGBoost
+    """
     
     def __init__(self, documents: List[dict]):
         self.documents = documents
