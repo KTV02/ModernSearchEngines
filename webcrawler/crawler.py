@@ -94,6 +94,8 @@ def get_links(url, keywords=None):
         for link in soup.find_all('a', href=True):
             href = link['href']
             full_url = urljoin(url, href)
+            #ensure that urls that point to different sections of a website get treated as the same url 
+            full_url=full_url.split("#")[0]
             
             # Check if the link is external or internal
             if urlparse(full_url).netloc == urlparse(url).netloc:
