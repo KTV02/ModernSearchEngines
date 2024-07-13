@@ -155,6 +155,3 @@ if __name__ == "__main__":
         #output = (str(i)+'.Language: ' + language + '\n' +
         output = 'Title: '+ str(data[i]['title'])+ '\n' + 'URL: ' + str(data[i]['url'])+ '\n'+ 'Tokens: ' + ' '.join(lemmatized_tokens) + '\n'
         append_to_file(output_file_path, output)
-
-
-
