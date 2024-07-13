@@ -2,6 +2,7 @@ retriever/training_data
 retriever/shap.csv
 webcrawler/index.db
 
+
 #ignore txt
 *.txt
 
