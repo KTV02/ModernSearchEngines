@@ -13,7 +13,7 @@ API_URL = "http://l.kremp-everest.nord:5000"  # Replace with your Flask API URL
 NUM_WORKERS = 10
 FILTER_CONTENT = True
 TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen','tuebing','tübing', 't%c3%bcbingen','university','uni','international','faculty','students','study','studies','student','excellence','science','course','teaching','research','office','learning','administration','education','strategy','alma','portal','information','german','semester','school','development','institutes','institute','language','eberhard','karls','computer','phd','ilias']
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen','tuebing','tübing', 't%c3%bcbingen','university','uni','eberhard','karls']
 
 ### --- DATABASE HELPER FUNCTIONS --- ###
 
