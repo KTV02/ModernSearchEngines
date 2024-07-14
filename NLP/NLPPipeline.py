@@ -14,10 +14,11 @@ from readability import Document
 from tqdm import tqdm
 
 # Ensure necessary NLTK data is downloaded
-#nltk.download('punkt')
-#nltk.download('stopwords')
-#nltk.download('averaged_perceptron_tagger')
-#nltk.download('wordnet')
+# You can comment it out if you already downloaded it
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('wordnet')
 
 output_file_path = 'NLPOutput.txt'
 
@@ -27,15 +28,14 @@ def initialize_file(file_path):
         file.write("")  # This clears the file
 
 # Function to append output to the file
-# liste übergeben, sonst wird das lost
 def append_to_file(file_path, text):
     try:
         with open(file_path, 'a', encoding='utf-8', errors='replace') as file:
-            #for t in text:
             file.write(text + "\n")
     except UnicodeEncodeError as e:
         print(f"UnicodeEncodeError: {e} for text: {text}")
 
+#function to access database with a SQL query
 def getFromDatabase(query):
     # Here instead of hostname you can also use the ip adresse Displayed in NordVPN
     url = 'http://l.kremp-everest.nord:5000/query'
@@ -86,7 +86,8 @@ def clean_html_content(html_content):
             'cleaned_content': None
         }
 
-
+#deprecated don't use
+#Can crawl a webpage
 def crawl_page(url):
     try:
         response = requests.get(url, timeout=10)  # Fetch the web page
@@ -141,7 +142,9 @@ def lemmatize_tokens(tokens):
     return lemmatized_tokens
 
 
-# Example usage:
+#Use main function to create file NLPOutput.txt containing title, url and content
+#processed by the NLP pipeline
+#use function parse_tokens in KeywordFilter class to read the title, url and content for ranking
 if __name__ == "__main__":
     data = getFromDatabase("SELECT * FROM documents")
     print('got documents')
