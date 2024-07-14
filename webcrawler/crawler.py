@@ -5,10 +5,10 @@ from bs4 import BeautifulSoup
 import datetime
 from langdetect import detect, LangDetectException
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
-import re
 import requests
+import logging
+from tenacity import retry, wait_exponential, stop_after_attempt
 
 # define globals
 API_URL = "http://l.kremp-everest.nord:5000"  # Replace with your Flask API URL
@@ -16,6 +16,10 @@ NUM_WORKERS = 20  # Increased number of workers for better concurrency
 FILTER_CONTENT = True
 TIMEOUT = 15
 TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen', 'eberhard', 'karls']
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ### --- DATABASE HELPER FUNCTIONS --- ###
 
@@ -28,7 +32,7 @@ def execute_query(api_url, query, params=None):
     if response.status_code == 200:
         return response.json()
     else:
-        print("Error executing query:", response.text)
+        logger.error("Error executing query: %s", response.text)
         return None
 
 def setup_database(api_url, drop_existing=False):
@@ -49,7 +53,7 @@ def setup_database(api_url, drop_existing=False):
         outgoing_links TEXT,
         timestamp TEXT
     )''')
-    print("Database setup completed.")
+    logger.info("Database setup completed.")
 
 def index_doc_batch(docs, api_url):
     query = '''
@@ -59,7 +63,7 @@ def index_doc_batch(docs, api_url):
     for doc in docs:
         params = (doc['url'], doc['title'], doc['content'], ','.join(doc['outgoing_links']), doc['timestamp'])
         execute_query(api_url, query, params)
-    print(f"Batch of {len(docs)} documents indexed.")
+    logger.info("Batch of %d documents indexed.", len(docs))
 
 def update_frontier_status_batch(urls, api_url):
     query = '''
@@ -68,12 +72,12 @@ def update_frontier_status_batch(urls, api_url):
     for url in urls:
         params = (url,)
         execute_query(api_url, query, params)
-    print(f"Batch of {len(urls)} URLs updated in frontier.")
+    logger.info("Batch of %d URLs updated in frontier.", len(urls))
 
 def count_remaining_frontier(api_url):
     query = "SELECT count(*) AS count FROM frontier WHERE crawled = 0"
     result = execute_query(api_url, query)
-    print("Count remaining frontier result:", result)
+    logger.info("Count remaining frontier result: %s", result)
     if result:
         return result[0]['count']
     return 0
@@ -90,32 +94,36 @@ def initialize_frontier(initial_urls, api_url):
         query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
         params = (url,)
         execute_query(api_url, query, params)
-    print("Frontier initialized.")
+    logger.info("Frontier initialized.")
 
 ### --- CRAWLER FUNCTIONS --- ###
+
+@retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
+async def fetch_url(session, url):
+    async with session.get(url, timeout=TIMEOUT) as response:
+        response.raise_for_status()
+        return await response.text()
 
 async def get_links(session, url, keywords=None):
     external_links = set()
     internal_links = set()
     
     try:
-        async with session.get(url) as response:
-            response.raise_for_status()
-            html = await response.text()
-            soup = BeautifulSoup(html, "html.parser")
+        html = await fetch_url(session, url)
+        soup = BeautifulSoup(html, "html.parser")
+        
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            full_url = urljoin(url, href)
+            full_url = full_url.split("#")[0]
             
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                full_url = urljoin(url, href)
-                full_url = full_url.split("#")[0]
-                
-                if urlparse(full_url).netloc == urlparse(url).netloc:
-                    internal_links.add(full_url)
-                else:
-                    external_links.add(full_url)
+            if urlparse(full_url).netloc == urlparse(url).netloc:
+                internal_links.add(full_url)
+            else:
+                external_links.add(full_url)
     
     except Exception as e:
-        print(f"Error fetching {url}: {e}")
+        logger.error("Error fetching %s: %s", url, e)
 
     if keywords:
         internal_links = [link for link in internal_links if any(keyword in link for keyword in keywords)]
@@ -125,37 +133,33 @@ async def get_links(session, url, keywords=None):
 
 async def crawl_page(session, url, keywords=None):
     try:
-        async with session.get(url, timeout=TIMEOUT) as response:
-            if response.status != 200:
+        html = await fetch_url(session, url)
+        soup = BeautifulSoup(html, 'html.parser')
+        title = soup.title.string if soup.title else "N/A"
+        content = ' '.join(soup.stripped_strings)
+
+        if FILTER_CONTENT and keywords:
+            if not any(word in content.lower() for word in keywords):
                 return None
 
-            html = await response.text()
-            soup = BeautifulSoup(html, 'html.parser')
-            title = soup.title.string if soup.title else "N/A"
-            content = ' '.join(soup.stripped_strings)
-
-            if FILTER_CONTENT and keywords:
-                if not any(word in content.lower() for word in keywords):
+            try:
+                if detect(content) != 'en':
                     return None
+            except LangDetectException:
+                return None
 
-                try:
-                    if detect(content) != 'en':
-                        return None
-                except LangDetectException:
-                    return None
+        ext_links, int_links = await get_links(session, url)
 
-            ext_links, int_links = await get_links(session, url)
-
-            doc = {
-                'url': url,
-                'title': title,
-                'content': content,
-                'outgoing_links': list(ext_links | int_links),
-                'timestamp': datetime.datetime.now().isoformat()
-            }
+        doc = {
+            'url': url,
+            'title': title,
+            'content': content,
+            'outgoing_links': list(ext_links | int_links),
+            'timestamp': datetime.datetime.now().isoformat()
+        }
 
     except Exception as e:
-        print(f"Exception encountered at {url}: {e}")
+        logger.error("Exception encountered at %s: %s", url, e)
         return None
 
     return doc
@@ -176,7 +180,7 @@ async def crawl(api_url):
                     break
 
                 tasks = [crawl_page(session, url, TUEBINGEN_KEYWORDS) for url in urls]
-                pages = await asyncio.gather(*tasks)
+                pages = await asyncio.gather(*tasks, return_exceptions=True)
 
                 docs = [page for page in pages if page is not None]
                 index_doc_batch(docs, api_url)
@@ -198,13 +202,13 @@ def main():
         asyncio.run(crawl(API_URL))
 
     except KeyboardInterrupt:
-        print("Interrupted. Exiting...")
+        logger.info("Interrupted. Exiting...")
         
     finally:
         index_tot = get_total_indexed_docs(API_URL)
         frontier_tot = count_remaining_frontier(API_URL)
-        print(f"Total indexed documents: {index_tot}")
-        print(f"Remaining URLs in frontier: {frontier_tot}")
+        logger.info("Total indexed documents: %d", index_tot)
+        logger.info("Remaining URLs in frontier: %d", frontier_tot)
 
 # Setup initial URLs and call main
 initial_urls = [
