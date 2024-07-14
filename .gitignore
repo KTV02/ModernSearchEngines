@@ -1,5 +1,7 @@
 retriever/training_data
 retriever/data/shap.csv
+data/shap.csv
+retriever/shap.csv
 webcrawler/index.db
 
 
