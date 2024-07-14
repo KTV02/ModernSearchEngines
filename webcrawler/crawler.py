@@ -158,11 +158,12 @@ async def crawl_page(session, url, keywords=None):
             'timestamp': datetime.datetime.now().isoformat()
         }
 
+        # If the page is relevant, return the document
+        return doc
+
     except Exception as e:
         logger.error("Exception encountered at %s: %s", url, e)
         return None
-
-    return doc
 
 async def crawl(api_url):
     total_to_crawl = count_remaining_frontier(api_url)
@@ -184,6 +185,17 @@ async def crawl(api_url):
 
                 docs = [page for page in pages if page is not None]
                 index_doc_batch(docs, api_url)
+
+                relevant_urls = [doc['url'] for doc in docs]
+                outgoing_links = set()
+                for doc in docs:
+                    outgoing_links.update(doc['outgoing_links'])
+
+                # Add outgoing links of relevant pages to the frontier
+                for link in outgoing_links:
+                    query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
+                    params = (link,)
+                    execute_query(api_url, query, params)
 
                 update_frontier_status_batch(urls, api_url)
                 pbar.update(len(urls))
