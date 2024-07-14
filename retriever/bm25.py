@@ -2,10 +2,8 @@
 Implement BM25 (BM25L or BM25+) with parallelization. 
 """
 import math
-from typing import List, Dict, Callable, Union
-from collections import Counter
+from typing import Callable
 import numpy as np
-from tqdm.auto import tqdm
 import scipy.sparse as sp
 from multiprocessing import Pool
 
@@ -237,7 +235,7 @@ if __name__ == "__main__":
         ["lorem", "ipsum", "dolor", "sit", "amet"],
         ["hello", "foo"]
     ]
-    bm25 = BM25S(corpus, num_threads=4, method="bm25+")
+    bm25 = BM25S(corpus, num_threads=4)
     query = ["hello", "foo", "ablenkung", "andereAblenkung"]
     scores = bm25.get_scores(query)
     print(scores)

@@ -1,19 +1,25 @@
 # This Python file uses the following encoding: utf-8
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
 import datetime
 from langdetect import detect, LangDetectException
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
-import re
+import requests
+import logging
+from tenacity import retry, wait_exponential, stop_after_attempt
 
 # define globals
 API_URL = "http://l.kremp-everest.nord:5000"  # Replace with your Flask API URL
-NUM_WORKERS = 10
+NUM_WORKERS = 20  # Increased number of workers for better concurrency
 FILTER_CONTENT = True
 TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen','tuebing','tübing', 't%c3%bcbingen','university','uni','international','faculty','students','study','studies','student','excellence','science','course','teaching','research','office','learning','administration','education','strategy','alma','portal','information','german','semester','school','development','institutes','institute','language','eberhard','karls','computer','phd','ilias']
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen', 'eberhard', 'karls',"Wurmlingen","Wolfenhausen","Wilhelmshöhe","Wendelsheim","Weitenburg","Weilheim","Weiler","Wankheim","Waldhörnle","Waldhof","Waldhausen","Wachendorf","Unterjesingen","Landkreis Tübingen","Tübingen","Talheim","Sulzau","Sülchen","Streimberg","Stockach","Westliche Steingart","Steinenberg","Seebronn","Schwärzloch","Schwalldorf","Schönbuchspitz","Naturpark Schönbuch","Schönberger Kopf","Schloßlesberg","Schloßbuckel","Schadenweilerhof","Saurücken","Rottenburg","Rosenau","Reusten","Remmingsheim","Rappenberg","Poltringen","Pfrondorf","Pfäffingen","Pfaffenberg","Österberg","Öschingen","Ofterdinger Berg","Ofterdingen","Odenburg","Oberwörthaus","Oberndorf","Obernau","Oberhausen","Neuhaus","Nellingsheim","Nehren","Mössingen","Mähringen","Lustnau","Lausbühl","Kusterdingen","Kreuzberg","Kreßbach","Kirchkopf","Kirchentellinsfurt","Kilchberg","Kiebingen","Jettenburg","Immenhausen","Hornkopf","Horn","Hohenstöffel","Schloss Hohenentringen","Hochburg","Hirschkopf","Hirschau","Hirrlingen","Hinterweiler","Heubergerhof","Heuberg","Heuberg","Hennental","Hemmendorf","Härtlesberg","Hailfingen","Hagelloch","Günzberg","Gomaringen","Geißhalde","Galgenberg","Frommenhausen","Firstberg","Filsenberg","Felldorf","Farrenberg","Bahnhof Eyach","Ergenzingen","Erdmannsbach","Ammerbuch","Einsiedel","Eichenfirst","Eichenberg","Ehingen","Eckenweiler","Höhe","Dußlingen","Dürrenberg","Dickenberg","Dettingen","Dettenhausen","Derendingen","Denzenberg","Buß","Burg","Buhlbachsaue","Bühl","Bühl","Bühl","Bromberg","Breitenholz","Börstingen","Bodelshausen","Bläsiberg","Bläsibad","Bierlingen","Bieringen","Belsen","Bei der Zeitungseiche","Bebenhausen","Baisingen","Bad Sebastiansweiler","Bad Niedernau","Ammern","Ammerbuch","Altstadt","Altingen","Alter Berg","Flugplatz Poltringen Ammerbuch","Starzach","Neustetten","Hotel Krone Tubingen","Hotel Katharina Garni","Bodelshausen","Dettenhausen","Dußlingen","Gomaringen","Hirrlingen","Kirchentellinsfurt","Kusterdingen","Nehren","Ofterdingen","Mössingen","Rottenburg am Neckar","Tübingen, Universitätsstadt","Golfclub Schloß Weitenburg","Siebenlinden","Steinenbertturm","Best Western Hotel Convita","Bebenhausen Abbey","Schloss Bebenhausen","Burgstall","Rafnachberg","Östliche Steingart","Kirnberg","Burgstall","Großer Spitzberg","Kleiner Spitzberg","Kapellenberg","Tannenrain","Grabhügel","Hemmendörfer Käpfle","Kornberg","Rotenberg","Weilerburg","Martinsberg","Eckberg","Entringen","Ofterdingen, Rathaus","Randelrain","Wahlhau","Unnamed Point","Spundgraben","University Library Tübingen","Tübingen Hbf","Bad Niedernau","Bieringen","Kiebingen","Unterjesingen Mitte","Unterjesingen Sandäcker","Entringen","Ergenzingen","Kirchentellinsfurt","Mössingen","Pfäffingen","Rottenburg (Neckar)","Tübingen West","Tübingen-Lustnau","Altingen (Württ)","Bad Sebastiansweiler-Belsen","Dußlingen","Bodelshausen","Nehren","Tübingen-Derendingen","Dettenhausen"]
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ### --- DATABASE HELPER FUNCTIONS --- ###
 
@@ -26,7 +32,7 @@ def execute_query(api_url, query, params=None):
     if response.status_code == 200:
         return response.json()
     else:
-        print("Error executing query:", response.text)
+        logger.error("Error executing query: %s", response.text)
         return None
 
 def setup_database(api_url, drop_existing=False):
@@ -47,21 +53,31 @@ def setup_database(api_url, drop_existing=False):
         outgoing_links TEXT,
         timestamp TEXT
     )''')
-    print("Database setup completed.")
+    logger.info("Database setup completed.")
 
-def index_doc(doc, api_url):
+def index_doc_batch(docs, api_url):
     query = '''
     INSERT OR IGNORE INTO documents (url, title, content, outgoing_links, timestamp)
     VALUES (?, ?, ?, ?, ?)
     '''
-    params = (doc['url'], doc['title'], doc['content'], ','.join(doc['outgoing_links']), doc['timestamp'])
-    execute_query(api_url, query, params)
-    print(f"Document indexed: {doc['url']}")
+    for doc in docs:
+        params = (doc['url'], doc['title'], doc['content'], ','.join(doc['outgoing_links']), doc['timestamp'])
+        execute_query(api_url, query, params)
+    logger.info("Batch of %d documents indexed.", len(docs))
+
+def update_frontier_status_batch(urls, api_url):
+    query = '''
+    UPDATE frontier SET crawled = 1 WHERE url = ?
+    '''
+    for url in urls:
+        params = (url,)
+        execute_query(api_url, query, params)
+    logger.info("Batch of %d URLs updated in frontier.", len(urls))
 
 def count_remaining_frontier(api_url):
     query = "SELECT count(*) AS count FROM frontier WHERE crawled = 0"
     result = execute_query(api_url, query)
-    print("Count remaining frontier result:", result)
+    logger.info("Count remaining frontier result: %s", result)
     if result:
         return result[0]['count']
     return 0
@@ -78,50 +94,50 @@ def initialize_frontier(initial_urls, api_url):
         query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
         params = (url,)
         execute_query(api_url, query, params)
-    print("Frontier initialized.")
+    logger.info("Frontier initialized.")
 
 ### --- CRAWLER FUNCTIONS --- ###
 
-def get_links(url, keywords=None):
+@retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
+async def fetch_url(session, url):
+    async with session.get(url, timeout=TIMEOUT) as response:
+        response.raise_for_status()
+        return await response.text()
+
+async def get_links(session, url, keywords=None):
     external_links = set()
     internal_links = set()
     
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        html = await fetch_url(session, url)
+        soup = BeautifulSoup(html, "html.parser")
         
         for link in soup.find_all('a', href=True):
             href = link['href']
             full_url = urljoin(url, href)
+            full_url = full_url.split("#")[0]
             
-            # Check if the link is external or internal
             if urlparse(full_url).netloc == urlparse(url).netloc:
                 internal_links.add(full_url)
             else:
                 external_links.add(full_url)
     
-    except requests.RequestException as e:
-        print(f"Error fetching {url}: {e}")
+    except Exception as e:
+        logger.error("Error fetching %s: %s", url, e)
 
-    # if keywords are passed, keep only those links that contain any of the keywords
     if keywords:
         internal_links = [link for link in internal_links if any(keyword in link for keyword in keywords)]
         external_links = [link for link in external_links if any(keyword in link for keyword in keywords)]
     
     return external_links, internal_links
 
-def crawl_page(url, keywords=None):
+async def crawl_page(session, url, keywords=None):
     try:
-        response = requests.get(url, timeout=TIMEOUT)  # Fetch the web page
-        if response.status_code != 200:
-            return None
-
-        soup = BeautifulSoup(response.text, 'html.parser')  # Parse the HTML content
+        html = await fetch_url(session, url)
+        soup = BeautifulSoup(html, 'html.parser')
         title = soup.title.string if soup.title else "N/A"
-        content = ' '.join(soup.stripped_strings)  # Using stripped_strings to clean up the text
+        content = ' '.join(soup.stripped_strings)
 
-        # Filter out pages that do not contain relevant keywords in their content or are not in English
         if FILTER_CONTENT and keywords:
             if not any(word in content.lower() for word in keywords):
                 return None
@@ -131,98 +147,68 @@ def crawl_page(url, keywords=None):
                     return None
             except LangDetectException:
                 return None
-        #CHANGED: URL is not being keyword filtered anymore => now only content is checked
-        ext_links, int_links = get_links(url)
+
+        ext_links, int_links = await get_links(session, url)
 
         doc = {
             'url': url,
             'title': title,
             'content': content,
-            'outgoing_links': list(ext_links | int_links),  # Using union operator to combine lists instead of "+"
+            'outgoing_links': list(ext_links | int_links),
             'timestamp': datetime.datetime.now().isoformat()
         }
 
-    except requests.RequestException as e:
-        print(f"Request exception encountered at {url}: {e}")
-        return None
     except Exception as e:
-        print(f"Unexpected exception encountered at {url}: {e}")
+        logger.error("Exception encountered at %s: %s", url, e)
         return None
 
     return doc
 
-def crawl(api_url):
+async def crawl(api_url):
     total_to_crawl = count_remaining_frontier(api_url)
 
-    with tqdm(total=total_to_crawl, desc="Crawling Progress", unit="page") as pbar:
-        while True:
-            query = "SELECT url FROM frontier WHERE crawled = 0 LIMIT 10"
-            result = execute_query(api_url, query)
-            if not result:
-                break
+    async with aiohttp.ClientSession() as session:
+        with tqdm(total=total_to_crawl, desc="Crawling Progress", unit="page") as pbar:
+            while True:
+                query = "SELECT url FROM frontier WHERE crawled = 0 LIMIT 100"
+                result = execute_query(api_url, query)
+                if not result:
+                    break
 
-            urls = [row['url'] for row in result]
-            if not urls:
-                break
+                urls = [row['url'] for row in result]
+                if not urls:
+                    break
 
-            with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
-                results = executor.map(lambda url: crawl_page(url,TUEBINGEN_KEYWORDS), urls)
+                tasks = [crawl_page(session, url, TUEBINGEN_KEYWORDS) for url in urls]
+                pages = await asyncio.gather(*tasks, return_exceptions=True)
 
-            for url, doc in zip(urls, results):
-                if doc:
-                    index_doc(doc, api_url)
-                    for link in doc['outgoing_links']:  # Add outgoing links to frontier
-                        query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
-                        params = (link,)
-                        execute_query(api_url, query, params)
-                    query = "UPDATE frontier SET crawled = 1 WHERE url = ?"
-                    params = (doc['url'],)
-                    execute_query(api_url, query, params)
-                    pbar.update(1)
-                else:
-                    query = "UPDATE frontier SET crawled = 1 WHERE url = ?"
-                    params = (url,)
-                    execute_query(api_url, query, params)
-                    pbar.update(1)
+                docs = [page for page in pages if page is not None]
+                index_doc_batch(docs, api_url)
 
+                update_frontier_status_batch(urls, api_url)
+                pbar.update(len(urls))
 
 def is_relevant_content(text, keywords, threshold=0.05):
-    '''
-    Use this method to determine if new webpage is relevant and
-    if the webcrawler should continue crawling from it
-    :param text: Content of the webpage
-    :param keywords: Keywords determined by e.g. Tfidf to represent english content related to tuebingen
-    :param threshold: We have to tune this once we have the keywords
-    :return: if webpage is pseudo-relevant (based on cheap techniques like TF-IDF => real relevance calc. in retrieval)
-    '''
-    # Preprocess the text
     processed_text = preprocess(text)
     word_count = len(processed_text.split())
-    
-    # Count keyword occurrences
     keyword_hits = sum(processed_text.count(keyword) for keyword in keywords)
-    
-    # Calculate relevance score
     relevance_score = keyword_hits / word_count
-    
     return relevance_score >= threshold
 
 def main():
     try:
         setup_database(API_URL, drop_existing=False)
         initialize_frontier(initial_urls + additional_urls, API_URL)
-        crawl(API_URL)
+        asyncio.run(crawl(API_URL))
 
     except KeyboardInterrupt:
-        print("Interrupted. Exiting...")
+        logger.info("Interrupted. Exiting...")
         
     finally:
-        # show number of indexed documents and remaining URLs in the frontier
         index_tot = get_total_indexed_docs(API_URL)
         frontier_tot = count_remaining_frontier(API_URL)
-
-        print(f"Total indexed documents: {index_tot}")
-        print(f"Remaining URLs in frontier: {frontier_tot}")
+        logger.info("Total indexed documents: %d", index_tot)
+        logger.info("Remaining URLs in frontier: %d", frontier_tot)
 
 # Setup initial URLs and call main
 initial_urls = [
