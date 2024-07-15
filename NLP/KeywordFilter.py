@@ -5,8 +5,6 @@ from collections import Counter, OrderedDict
 # Add the directories to the system path
 sys.path.append(os.path.abspath('../retriever/'))
 
-# Import MyClass from lib/nested/my_class
-from retriever.vectorspace import VectorSpaceModel
 
 #can read the NLPOutput.txt file and returns the contents (as token lists), urls and titles used for ranking
 def parse_tokens(file_path):
