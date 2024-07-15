@@ -120,7 +120,7 @@ class PrecomputedDocumentFeatures:
     
     def get_synonyms(self, term):
         """ Get synonyms from Wordnet."""
-        nltk.download('wordnet')
+        #nltk.download('wordnet')
         synonyms = set()
         for syn in wordnet.synsets(term):
             for lemma in syn.lemmas():

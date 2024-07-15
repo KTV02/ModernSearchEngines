@@ -50,7 +50,5 @@ q_preprocessor = QueryPreprocessor(query)
 
 model_id = 'sentence-transformers/all-MiniLM-L6-v2'
 emb = q_preprocessor.compute_embedding(model_id)
-print(emb.shape)
 
 rel_keywords = q_preprocessor.find_similar_keywords()
-print(rel_keywords)
