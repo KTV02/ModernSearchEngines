@@ -1,165 +1,119 @@
 """
-Implement BM25 (BM25L or BM25+) with parallelization. 
+Lucene Implementation of BM25.
+
+This implementation follows the Lucene (accurate) variant of the BM25 algorithm, 
+which uses exact document lengths instead of lossy compressed lengths.
+
+References:
+- BM25 Literature Review: https://cs.uwaterloo.ca/~jimmylin/publications/Kamphuis_etal_ECIR2020_preprint.pdf
 """
 import math
-from tqdm import tqdm
-from typing import Callable
+from typing import List, Tuple
 import numpy as np
 import scipy.sparse as sp
+from functools import partial
+from tqdm import tqdm
 from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor
+
 
 class BM25S:
-    def __init__(self, corpus, k1=1.2, b=0.75, delta=1.0, method="bm25l", num_threads=4):
+    def __init__(self, corpus, k1=1.2, b=0.75, num_threads=4):
         """
         Initialize BM25S with the given corpuses and parameters.
 
         Parameters:
         - corpus: List of documents, where each document is a list of terms.
-        - k1: BM25 parameter for term frequency scaling.
-        - b: BM25 parameter for document length normalization.
-        - delta: BM25 parameter for BM25+ and BM25L variants.
-        - method: Scoring method to use ("bm25l", "bm25+").
+        - k1: BM25 parameter for term frequency scaling and non-linear term frequency normalization
+        - b: BM25 parameter for document length tf values normalization.
         - num_threads: Number of threads for parallelization.
         """
+        if k1 < 0:
+            raise ValueError("k1 must be greater or equal to 0")
+        if num_threads <= 0:
+            raise ValueError("num threads must be greater than 1")
+        if not (0 <= b <= 1):
+            raise ValueError(f"b must be between 0 and 1, got {b}")
         self.k1 = k1
         self.b = b
-        self.delta = delta
-        assert method in ["bm25l", "bm25+"], "Invalid scoring method."
-        self.method = method
         self.num_threads = num_threads
-
-        assert type(corpus[0]) == list, "Corpus is not tokenized properly."
+        if not isinstance(corpus[0], list):
+            raise ValueError("Corpus is not tokenized properly.")
         self.corpus = corpus
         self.N = len(corpus)
-        self.avgdl = sum(len(doc) for doc in corpus) / self.N
-        self.doc_len = np.array([len(doc) for doc in corpus])
-
         self._initialize()
-
 
     def _initialize(self):
         """
         Initialize the term frequency (TF) and inverse document frequency (IDF)
         matrices for the corpus.
         """
-        word_count = {}
+        term_frequencies = {}  # To store term frequencies
+        doc_freqs = {}   # To store document frequencies
+        total_terms = 0
+
         for doc in tqdm(self.corpus, desc="Processing corpus"):
+            total_terms += len(doc)
+            unique_words_in_doc = set()  # Track unique words in the current document
             for word in doc:
-                if word not in word_count:
-                    word_count[word] = 0
-                word_count[word] += 1
+                if word not in term_frequencies:
+                    term_frequencies[word] = 0
+                    doc_freqs[word] = 0  # Initialize document frequency for new words
+                term_frequencies[word] += 1
+                unique_words_in_doc.add(word)
+        
+            # Update document frequencies
+            for word in unique_words_in_doc:
+                doc_freqs[word] += 1
 
-        self.idf = {}
-        for word, freq in tqdm(word_count.items(), desc="Calculating IDF"):
-            self.idf[word] = np.log((self.N - freq + 0.5) / (freq + 0.5) + 1)
-
-        self.tf = sp.dok_matrix((self.N, len(word_count)), dtype=np.float32)
-        self.word_index = {word: idx for idx, word in enumerate(word_count)}
+        self.idf = {word: self._idf(doc_freq, self.N) for word, doc_freq in doc_freqs.items()}
+        self.tf = sp.dok_matrix((self.N, len(term_frequencies)), dtype=np.float32)
+        self.word_index = {word: idx for idx, word in enumerate(term_frequencies)}
 
         for doc_idx, doc in tqdm(enumerate(self.corpus), desc="Calculating TF", total=self.N):
             for word in doc:
                 self.tf[doc_idx, self.word_index[word]] += 1
 
         self.tf = self.tf.tocsr()
+        self.doc_len = np.array(self.tf.sum(axis=1)).flatten()
 
-    def _score_tfc_bm25plus(self, tf_array, l_d, l_avg, k1, b, delta):
-        """
-        Computes the term frequency component of the BM25 score using BM25+ variant.
-        
-        Parameters:
-        - tf_array: Term frequency array.
-        - l_d: Length of the document.
-        - l_avg: Average document length in the corpus.
-        - k1: BM25 parameter for term frequency scaling.
-        - b: BM25 parameter for document length normalization.
-        - delta: BM25+ parameter.
-        
-        Returns:
-        - tfc: Term frequency component for BM25+.
-        """
-        num = (k1 + 1) * tf_array
-        den = k1 * (1 - b + b * l_d / l_avg) + tf_array
-        return (num / den) + delta
+        # sum of all term frequencies divided by the number of documents
+        self.avgdl = total_terms / self.N
 
-    def _score_idf_bm25plus(self, df, num_documents):
+    def get_corpus(self):
+        return self.corpus
+    
+    def _get_topk_results(self, query_scores: np.ndarray, k: int, sorted: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Computes the inverse document frequency component of the BM25 score using BM25+ variant.
+        Efficiently retrieve the top-k elements from a numpy array.
         
-        Parameters:
-        - df: Document frequency of the token.
-        - N: Total number of documents in the corpus.
+        Args:
+            query_scores (np.ndarray): Array of scores.
+            k (int): Number of top elements to retrieve.
+            sorted (bool): If True, returns the top-k elements in sorted order.
         
         Returns:
-        - idf: Inverse document frequency for the token.
+            tuple: Top-k scores and their corresponding indices.
         """
-        return math.log((num_documents + 1) / df)
+        # Efficiently get the indices of the top-k elements
+        topk_indices = np.argpartition(query_scores, -k)[-k:]
 
-    def _score_tfc_bm25l(self, tf_array, l_d, l_avg, k1, b, delta):
-        """
-        Computes the term frequency component of the BM25 score using BM25L variant.
-        
-        Parameters:
-        - tf_array: Term frequency array.
-        - l_d: Length of the document.
-        - l_avg: Average document length in the corpus.
-        - k1: BM25 parameter for term frequency scaling.
-        - b: BM25 parameter for document length normalization.
-        - delta: BM25L parameter.
-        
-        Returns:
-        - tfc: Term frequency component for BM25L.
-        """
-        c_array = tf_array / (1 - b + b * l_d / l_avg)
-        return ((k1 + 1) * (c_array + delta)) / (k1 + c_array + delta)
+        # Retrieve the top-k scores
+        topk_scores = query_scores[topk_indices]
 
-    def _score_idf_bm25l(self, df, num_documents):
-        """
-        Computes the inverse document frequency component of the BM25 score using BM25L variant.
-        
-        Parameters:
-        - df: Document frequency of the token.
-        - N: Total number of documents in the corpus.
-        
-        Returns:
-        - idf: Inverse document frequency for the token.
-        """
-        return math.log((num_documents + 1) / (df + 0.5))
+        if sorted:
+            # If sorting is required, sort the top-k scores and their indices
+            sort_indices = np.argsort(topk_scores)[::-1]
+            topk_indices = topk_indices[sort_indices]
+            topk_scores = topk_scores[sort_indices]
 
-    def _select_tfc_scorer(self, method) -> Callable:
-        """
-        Select the term frequency component scorer based on the method.
+        return topk_scores, topk_indices
 
-        Parameters:
-        - method: The BM25 variant method.
+    def _get_top_k_results(self, query_tokens_single: List[str], k: int = 1000, sorted: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        scores_q = self._score(query_tokens_single)
+        return self._get_topk_results(scores_q, k=k, sorted=sorted)
 
-        Returns:
-        - A function to compute the term frequency component.
-        """
-        if method == "bm25l":
-            return self._score_tfc_bm25l
-        elif method == "bm25+":
-            return self._score_tfc_bm25plus
-        else:
-            raise ValueError(f"Invalid scoring method: {method}. Choose from 'bm25l', 'bm25+'.")
-
-    def _select_idf_scorer(self, method) -> Callable:
-        """
-        Select the inverse document frequency component scorer based on the method.
-
-        Parameters:
-        - method: The BM25 variant method.
-
-        Returns:
-        - A function to compute the inverse document frequency component.
-        """
-        if method == "bm25l":
-            return self._score_idf_bm25l
-        elif method == "bm25+":
-            return self._score_idf_bm25plus
-        else:
-            raise ValueError(f"Invalid scoring method: {method}. Choose from 'bm25l', 'bm25+'.")
-
-    def get_scores(self, query):
+    def _score(self, query: List[str]):
         """
         Compute BM25 scores for all documents in the corpus against a query.
 
@@ -169,79 +123,99 @@ class BM25S:
         Returns:
         - scores: Array of BM25 scores for all documents.
         """
-        doc_indices = list(range(self.N))
-        if self.num_threads > 1:
-            with Pool(self.num_threads) as pool:
-                results = pool.starmap(self._parallel_score, 
-                                       [(query, doc_indices[i::self.num_threads]) for i in range(self.num_threads)])
-                scores = [score for sublist in results for score in sublist]
-        else:
-            scores = self._parallel_score(query, doc_indices)
-
-        return np.array(scores)
-
-    def _parallel_score(self, query, doc_indices):
-        """
-        Compute BM25 scores for a subset of documents.
-
-        Parameters:
-        - query: List of terms in the query.
-        - doc_indices: List of document indices to score.
-
-        Returns:
-        - scores: List of BM25 scores for the documents.
-        """
-        scores = []
-        for doc_idx in doc_indices:
-            scores.append(self._score(query, doc_idx))
-        return scores
-
-    def _score(self, query, doc_idx):
-        """
-        Compute the BM25 score for a single document against a query.
-
-        Parameters:
-        - query: List of terms in the query.
-        - doc_idx: Index of the document to score.
-
-        Returns:
-        - score: BM25 score for the document.
-        """
-        score = 0.0
-        doc_vector = self.tf[doc_idx]
-        doc_len = self.doc_len[doc_idx]
-
-        tfc_scorer = self._select_tfc_scorer(self.method)
-        idf_scorer = self._select_idf_scorer(self.method)
-
+        scores = np.zeros(self.N)
         for word in query:
             if word in self.word_index:
                 word_idx = self.word_index[word]
-                freq = doc_vector[0, word_idx]
+                idf = self.idf[word]
+                for doc_idx in range(self.N):
+                    freq = self.tf[doc_idx, word_idx]
+                    if freq == 0:
+                        continue
+                    scores[doc_idx] += idf * self._compute_tf_component(freq, doc_idx)
+        return scores
+    
+    def retrieve(self, query_tokens: List[List[str]], k: int = 50, sorted: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Retrieve the top-k BM25 scores and their corresponding document indices for a list of queries.
+        
+        Parameters:
+        - query_tokens: List of tokenized queries.
+        - k: Number of top elements to retrieve for each query.
+        - sorted: If True, returns the top-k elements in sorted order.
 
-                if freq == 0:
-                    continue
+        Returns:
+        - Tuple of numpy arrays: scores and indices of the top-k elements.
+        """
+        topk_fn = partial(self._get_top_k_results, k=k, sorted=sorted)
 
-                idf = idf_scorer(df=self.tf[:, word_idx].sum(), num_documents=self.N)
-                tfc = tfc_scorer(tf_array=freq, l_d=doc_len, l_avg=self.avgdl, 
-                                 k1=self.k1, b=self.b, delta=self.delta)
+        if self.num_threads > 1:
+            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                results = list(tqdm(executor.map(topk_fn, query_tokens), total=len(query_tokens), desc="Scoring queries"))
+        else:
+            results = list(tqdm(map(topk_fn, query_tokens), total=len(query_tokens), desc="Scoring queries"))
 
-                score += idf * tfc
+        scores, indices = zip(*results)
+        return np.array(scores), np.array(indices)
 
-        return score
 
+    def _compute_tf_component(self, freq, doc_idx):
+        """
+        Compute the term frequency component of the BM25 score.
+
+        Formula based on Lucene (accurate)
+
+        Parameters:
+        - freq: Term frequency in the document.
+        - doc_idx: Document index.
+
+        Returns:
+        - TF component of the BM25 score.
+        """
+        doc_len = self.doc_len[doc_idx]
+        norm = self.k1 * ((1 - self.b) + self.b * doc_len / self.avgdl)
+        return freq / (freq + norm)
+
+    def _idf(self, doc_freq, doc_count):
+        """
+        Compute the inverse document frequency component.
+
+        Formula based on Lucene (accurate).
+
+        Parameters:
+        - doc_freq: df_t = Document frequency of the term.
+        - doc_count: N = Total number of documents.
+
+        Returns:
+        - IDF value.
+        """
+        return float(math.log(1 + (doc_count - doc_freq + 0.5) / (doc_freq + 0.5)))
 
 # Example Usage
-"""
 if __name__ == "__main__":
     corpus = [
-        ["hello", "world"],
+        ["hello", "world", "ddifern"],
         ["foo", "bar", "baz"],
         ["lorem", "ipsum", "dolor", "sit", "amet"],
-        ["hello", "foo"]
+        ["hello", "foo"],
+        [
+        "the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog",
+        "this", "is", "a", "long", "sentence", "to", "test", "the", "bm25", "implementation",
+        "we", "need", "to", "include", "many", "different", "words", "to", "ensure",
+        "that", "the", "algorithm", "can", "handle", "a", "larger", "vocabulary",
+        "and", "compute", "the", "scores", "correctly", "even", "with", "a", "long",
+        "document", "like", "this", "one", "which", "contains", "contains", "contains", "multiple", "unique",
+        "terms", "and", "repeated", "terms", "to", "make", "sure", "that", "document",
+        "frequencies", "and", "term", "frequencies", "are", "calculated", "properly"
+        ]
     ]
     bm25 = BM25S(corpus, num_threads=4)
-    query = ["hello", "foo", "ablenkung", "andereAblenkung"]
-    scores = bm25.get_scores(query)
-    print(scores)
-"""
+    query = [["hello", "term"]]
+    x, y = bm25.retrieve(query, k=5)
+    print(x)
+
+    query_many = [["hello", "term"], ["hello", "foo"], ["make", "ipsum"], ["long", "long", "long"]]
+    x, y = bm25.retrieve(query_many, k=5)
+    print(x)
+    #scores = bm25.score(query)
+    #print(scores)
