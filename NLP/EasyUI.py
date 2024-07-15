@@ -7,13 +7,14 @@ import bm25s
 sys.path.append(os.path.abspath('../retriever'))
 #from bm25 import BM25S
 importlib.reload(kwf)
-
+#returns the users console input
 def get_user_input():
     user_input = input("Please type your query and press Enter: ")
     user_input = user_input.split()
     return user_input
 
 
+#can be commented in if eriks original bm25 algorithm should be used for ranking
 
 # if __name__ == "__main__":
 #     corpus, titles, urls = kwf.parse_tokens("NLPOutput.txt")
@@ -35,24 +36,23 @@ def get_user_input():
 #         print('interrupted!')
 
 
+#starts the illegal bm25 from GitHub
+#and processes the users query on the corpus from the NLP Pipeline
 if __name__ == "__main__":
     #Quelle: https://github.com/xhluca/bm25s
     corpus, titles, urls = kwf.parse_tokens("NLPOutput.txt")
-    corpus = [' '.join(tokens) for tokens in corpus]
+    corpusJoined = [' '.join(tokens) for tokens in corpus]
     print('Corpus parsed')
 
-    #technically working, not sure how to get the title -> indexes?
     # Create the BM25 model and index the corpus
-    retriever = bm25s.BM25(corpus=corpus)
-    retriever.index(bm25s.tokenize(corpus))
+    retriever = bm25s.BM25(corpus=corpusJoined,method="bm25+")
+    retriever.index(corpus)
 
     # Query the corpus and get top-k results
     query = get_user_input()
     #HACK: modified bm25s to return indices instead of documents as results
     results, scores = retriever.retrieve(bm25s.tokenize(query), k=10)
 
-    # Let's see what we got!
-    #doc, score = results[0, 0], scores[0, 0]
     print(results)
     relevantTitles = [titles[i] for i in results[0]]
     relevantUrls = [urls[i] for i in results[0]]

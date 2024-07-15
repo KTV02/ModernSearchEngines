@@ -11,11 +11,41 @@ import logging
 from tenacity import retry, wait_exponential, stop_after_attempt
 
 # define globals
-API_URL = "http://l.kremp-everest.nord:5000"  # Replace with your Flask API URL
+API_URL = "http://l.kremp-everest.nord:5000"  
 NUM_WORKERS = 20  # Increased number of workers for better concurrency
 FILTER_CONTENT = True
 TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen', 'eberhard', 'karls',"Wurmlingen","Wolfenhausen","Wilhelmshöhe","Wendelsheim","Weitenburg","Weilheim","Weiler","Wankheim","Waldhörnle","Waldhof","Waldhausen","Wachendorf","Unterjesingen","Landkreis Tübingen","Tübingen","Talheim","Sulzau","Sülchen","Streimberg","Stockach","Westliche Steingart","Steinenberg","Seebronn","Schwärzloch","Schwalldorf","Schönbuchspitz","Naturpark Schönbuch","Schönberger Kopf","Schloßlesberg","Schloßbuckel","Schadenweilerhof","Saurücken","Rottenburg","Rosenau","Reusten","Remmingsheim","Rappenberg","Poltringen","Pfrondorf","Pfäffingen","Pfaffenberg","Österberg","Öschingen","Ofterdinger Berg","Ofterdingen","Odenburg","Oberwörthaus","Oberndorf","Obernau","Oberhausen","Neuhaus","Nellingsheim","Nehren","Mössingen","Mähringen","Lustnau","Lausbühl","Kusterdingen","Kreuzberg","Kreßbach","Kirchkopf","Kirchentellinsfurt","Kilchberg","Kiebingen","Jettenburg","Immenhausen","Hornkopf","Horn","Hohenstöffel","Schloss Hohenentringen","Hochburg","Hirschkopf","Hirschau","Hirrlingen","Hinterweiler","Heubergerhof","Heuberg","Heuberg","Hennental","Hemmendorf","Härtlesberg","Hailfingen","Hagelloch","Günzberg","Gomaringen","Geißhalde","Galgenberg","Frommenhausen","Firstberg","Filsenberg","Felldorf","Farrenberg","Bahnhof Eyach","Ergenzingen","Erdmannsbach","Ammerbuch","Einsiedel","Eichenfirst","Eichenberg","Ehingen","Eckenweiler","Höhe","Dußlingen","Dürrenberg","Dickenberg","Dettingen","Dettenhausen","Derendingen","Denzenberg","Buß","Burg","Buhlbachsaue","Bühl","Bühl","Bühl","Bromberg","Breitenholz","Börstingen","Bodelshausen","Bläsiberg","Bläsibad","Bierlingen","Bieringen","Belsen","Bei der Zeitungseiche","Bebenhausen","Baisingen","Bad Sebastiansweiler","Bad Niedernau","Ammern","Ammerbuch","Altstadt","Altingen","Alter Berg","Flugplatz Poltringen Ammerbuch","Starzach","Neustetten","Hotel Krone Tubingen","Hotel Katharina Garni","Bodelshausen","Dettenhausen","Dußlingen","Gomaringen","Hirrlingen","Kirchentellinsfurt","Kusterdingen","Nehren","Ofterdingen","Mössingen","Rottenburg am Neckar","Tübingen, Universitätsstadt","Golfclub Schloß Weitenburg","Siebenlinden","Steinenbertturm","Best Western Hotel Convita","Bebenhausen Abbey","Schloss Bebenhausen","Burgstall","Rafnachberg","Östliche Steingart","Kirnberg","Burgstall","Großer Spitzberg","Kleiner Spitzberg","Kapellenberg","Tannenrain","Grabhügel","Hemmendörfer Käpfle","Kornberg","Rotenberg","Weilerburg","Martinsberg","Eckberg","Entringen","Ofterdingen, Rathaus","Randelrain","Wahlhau","Unnamed Point","Spundgraben","University Library Tübingen","Tübingen Hbf","Bad Niedernau","Bieringen","Kiebingen","Unterjesingen Mitte","Unterjesingen Sandäcker","Entringen","Ergenzingen","Kirchentellinsfurt","Mössingen","Pfäffingen","Rottenburg (Neckar)","Tübingen West","Tübingen-Lustnau","Altingen (Württ)","Bad Sebastiansweiler-Belsen","Dußlingen","Bodelshausen","Nehren","Tübingen-Derendingen","Dettenhausen"]
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen', 'eberhard', 'karls',
+                      'wurmlingen', 'wolfenhausen', 'wilhelmshöhe', 'wendelsheim', 'weitenburg', 'weilheim', 'weiler',
+                      'wankheim', 'waldhörnle', 'waldhof', 'waldhausen', 'wachendorf', 'unterjesingen', 'landkreis tübingen',
+                      'tübingen', 'talheim', 'sulzau', 'sülchen', 'streimberg', 'stockach', 'westliche steingart', 'steinenberg',
+                      'seebronn', 'schwärzloch', 'schwalldorf', 'schönbuchspitz', 'naturpark schönbuch', 'schönberger kopf',
+                      'schloßlesberg', 'schloßbuckel', 'schadenweilerhof', 'saurücken', 'rottenburg', 'rosenau', 'reusten',
+                      'remmingsheim', 'rappenberg', 'poltringen', 'pfrondorf', 'pfäffingen', 'pfaffenberg', 'österberg',
+                      'öschingen', 'ofterdinger berg', 'ofterdingen', 'odenburg', 'oberwörthaus', 'oberndorf', 'obernau',
+                      'oberhausen', 'neuhaus', 'nellingsheim', 'nehren', 'mössingen', 'mähringen', 'lustnau', 'lausbühl',
+                      'kusterdingen', 'kreuzberg', 'kreßbach', 'kirchkopf', 'kirchentellinsfurt', 'kilchberg', 'kiebingen',
+                      'jettenburg', 'immenhausen', 'hornkopf', 'horn', 'hohenstöffel', 'schloss hohenentringen', 'hochburg',
+                      'hirschkopf', 'hirschau', 'hirrlingen', 'hinterweiler', 'heubergerhof', 'heuberg', 'heuberg',
+                      'hennental', 'hemmendorf', 'härtlesberg', 'hailfingen', 'hagelloch', 'günzberg', 'gomaringen',
+                      'geißhalde', 'galgenberg', 'frommenhausen', 'firstberg', 'filsenberg', 'felldorf', 'farrenberg',
+                      'bahnhof eyach', 'ergenzingen', 'erdmannsbach', 'ammerbuch', 'einsiedel', 'eichenfirst', 'eichenberg',
+                      'ehingen', 'eckenweiler', 'höhe', 'dußlingen', 'dürrenberg', 'dickenberg', 'dettingen', 'dettenhausen',
+                      'derendingen', 'denzenberg', 'buß', 'burg', 'buhlbachsaue', 'bühl', 'bühl', 'bühl', 'bromberg',
+                      'breitenholz', 'börstingen', 'bodelshausen', 'bläsiberg', 'bläsibad', 'bierlingen', 'bieringen',
+                      'belsen', 'bei der zeitungseiche', 'bebenhausen', 'baisingen', 'bad sebastiansweiler', 'bad niedernau',
+                      'ammern', 'ammerbuch', 'altstadt', 'altingen', 'alter berg', 'flugplatz poltringen ammerbuch', 'starzach',
+                      'neustetten', 'hotel krone tubingen', 'hotel katharina garni', 'bodelshausen', 'dettenhausen',
+                      'dußlingen', 'gomaringen', 'hirrlingen', 'kirchentellinsfurt', 'kusterdingen', 'nehren', 'ofterdingen',
+                      'mössingen', 'rottenburg am neckar', 'tübingen, universitätsstadt', 'golfclub schloß weitenburg',
+                      'siebenlinden', 'steinenbertturm', 'best western hotel convita', 'bebenhausen abbey', 'schloss bebenhausen',
+                      'burgstall', 'rafnachberg', 'östliche steingart', 'kirnberg', 'burgstall', 'großer spitzberg', 'kleiner spitzberg',
+                      'kapellenberg', 'tannenrain', 'grabhügel', 'hemmendörfer käpfle', 'kornberg', 'rotenberg', 'weilerburg',
+                      'martinsberg', 'eckberg', 'entringen', 'ofterdingen, rathaus', 'randelrain', 'wahlhau', 'unnamed point',
+                      'spundgraben', 'university library tübingen', 'tübingen hbf', 'bad niedernau', 'bieringen', 'kiebingen',
+                      'unterjesingen mitte', 'unterjesingen sandäcker', 'entringen', 'ergenzingen', 'kirchentellinsfurt',
+                      'mössingen', 'pfäffingen', 'rottenburg (neckar)', 'tübingen west', 'tübingen-lustnau', 'altingen (württ)',
+                      'bad sebastiansweiler-belsen', 'dußlingen', 'bodelshausen', 'nehren', 'tübingen-derendingen', 'dettenhausen']
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

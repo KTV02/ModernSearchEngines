@@ -4,23 +4,29 @@ import pickle
 import requests
 from multiprocessing import cpu_count
 from retriever.bm25 import BM25S
-#from retriever.query_preprocessor import QueryPreprocessor
+#from retriever.query_preprocessor import QueryPreprocessor  #NOTE not used yet
 from retriever.compute_features import tokenize, PrecomputedDocumentFeatures
-import bm25s
 from NLP.KeywordFilter import parse_tokens
+from NLP.NLPPipeline import NLP_Pipeline
 import NLP.KeywordFilter as kwf
 import numpy as np
 import nltk
 import xgboost as xgb
 import numpy as np
+
+#NOTE download necessary resources
 #nltk.download("wordnet")
+#nltk.download('punkt')
+#nltk.download('stopwords')
+#nltk.download('averaged_perceptron_tagger')
+#nltk.download('wordnet')
 
 # set globals
-BENCHMARK_WITH_BM25S = False
-LOAD_CACHE = False
-CACHE_PATH = "./retriever/bm25_cache_new.pkl"
-SAVE_MODEL = False
-SAVE_PATH = "./retriever/bm25_cache_new.pkl"
+READ_INDEX = False  # True: index will be read from DB and NLP pipeline performed on it, False: Use NLP_Output.txt
+NLP_OUTPUT_PATH = "./NLP/NLPOutput.txt"
+LOAD_BM25 = True
+BM25_PATH = "./retriever/bm25_cache_new.pkl"
+SAVE_MODEL = True
 XGB_TOP_K = 10
 
 def input_query():
@@ -76,22 +82,22 @@ def query_db(columns: list, limit: int=None, auth = ('mseproject', 'tuebingen202
         return -1
 
 def main():
-    """
-    print("Parsing corpus...")
-    corpus, titles, urls = kwf.parse_tokens("./NLP/NLPOutput10000.txt")  # NOTE: parse_tokens returns list of tokens that needs to be lowercased
-    corpus = [' '.join([token.lower() for token in doc]) for doc in corpus]    
-    print('Corpus parsed.')
-    """
-    data = query_db(columns=["url", "title", "content"])
-    titles, urls = [doc['title'] for doc in data], [doc['url'] for doc in data]
-    print("Tokenizing corpus...")
-    corpus = [tokenize(doc["content"]) for doc in data]
-    print("Corpus tokenized.")
+
+    # for READ_INDEX == True: get most recent set of documents from the database and run the NLP pipeline
+    if READ_INDEX:
+        print("Reading index from database...")
+        data = query_db(columns=["url", "title", "content"])
+        print("...and running NLP pipeline...")
+        nlp_pipeline = NLP_Pipeline(data, output_file_path=NLP_OUTPUT_PATH)
+        nlp_pipeline.process_documents()
+        print("NLP pipeline completed.")
+
+    corpus, titles, urls = kwf.parse_tokens(NLP_OUTPUT_PATH)
 
     # Create or load the BM25 model and index the corpus
-    if LOAD_CACHE and os.path.exists(CACHE_PATH):
+    if LOAD_BM25 and os.path.exists(BM25_PATH):
         print("Loading BM25 model from cache...")
-        with open(CACHE_PATH, 'rb') as f:
+        with open(BM25_PATH, 'rb') as f:
             retriever = pickle.load(f)
         print("BM25 model loaded from cache.")
 
@@ -99,81 +105,71 @@ def main():
         print("Creating BM25 model...")
         retriever = BM25S(corpus, num_threads=cpu_count())
         if SAVE_MODEL:
-            os.makedirs(os.path.dirname(SAVE_PATH), exist_ok=True)
-            with open(SAVE_PATH, 'wb') as f:
+            os.makedirs(os.path.dirname(BM25_PATH), exist_ok=True)
+            with open(BM25_PATH, 'wb') as f:
                 pickle.dump(retriever, f)
                 print("BM25 model saved to cache.")
         print("BM25 model created.")
 
-    # if the bm25 model should be benchmarked with the ready-to-use version from bm25s
-    if BENCHMARK_WITH_BM25S:
-        retriever_bm = bm25s.BM25(corpus=corpus)
-        retriever_bm.index(bm25s.tokenize(corpus))
-        print("Benchmark BM25 initialized.")
+    #query = input_query()
+    query = "food and drinks"
 
-    query = input_query()
-    start = time.time()
+    start_total = time.time()
     tok_query = tokenize(query)
 
     assert type(tok_query) == list, "Query is not tokenized properly."
 
-    # Preprocess the query (not used yet)
+    # Preprocess the query #NOTE not used yet)
     #query_preprocessor = QueryPreprocessor(query)
     #query_embedding = query_preprocessor.compute_embedding('sentence-transformers/all-MiniLM-L6-v2')
     #related_keywords = query_preprocessor.find_similar_keywords()
 
+    # User input on model specification #NOTE not used yet
     #model = input_model()  # not used yet
 
     # Query the corpus and get top-k results
     print("Retrieving results...")
-    scores = retriever.get_scores(tok_query)  # BUG: Scores are mostly negative 
-    print(np.where(scores > 0).shape)
-    print(np.where(scores == 0).shape)
-    print(np.where(scores < 0).shape)
-    print(scores)
-    bm25_time = start - time.time()
+    start_bm25 = time.time()
+    scores = retriever.get_scores(tok_query)
+    bm25_time = time.time() - start_bm25
     top_50_scores_indices = scores.argsort()[-50:][::-1]
-    top_50_scores = scores[top_50_scores_indices]
-    print(top_50_scores)
-    if BENCHMARK_WITH_BM25S:
-        results_bm, scores_bm = retriever_bm.retrieve(bm25s.tokenize(query), k=10)
-        results_bm = [res for res in results_bm.reshape(-1)]
-        scores_bm = [score for score in scores_bm.reshape(-1)]
 
-    documents = [data[index] for index in top_50_scores_indices]
-    for doc in documents:
-        doc["body"] = doc.pop("content")
+    documents = []
+    for index in top_50_scores_indices:
+        documents.append({"body": " ".join(corpus[index]), "title": titles[index], "url": urls[index]})
 
     # get top 50 results for XGBoost and get XGB predictions
-    #top_n_results = get_top_n_results(results, titles, urls, corpus, 50)
+    start_xgb = time.time()
     extracted_features = extract_features(documents, query)
     ranker = xgb.XGBRanker()
 
     # Load the model from the file
     ranker.load_model('./retriever/xgb_ranker_model.json')
     y_pred = ranker.predict(extracted_features)
-    top_n_indices = np.argsort(y_pred)[-XGB_TOP_K:][::-1]
+    XGB_top_indices = np.argsort(y_pred)[-XGB_TOP_K:][::-1]
+    xgb_time = time.time() - start_xgb
 
-    results = [
-        {"title": titles[i], "url": urls[i], "score": y_pred[i], "body": corpus[i]} for i in top_n_indices
+    total_time = time.time() - start_total
+
+    XGB_results = [
+        {"index": i,  "title": titles[i], "url": urls[i], "score": y_pred[i], "body": corpus[i]} for i in XGB_top_indices
     ]
-    # Print the top n documents
-    print("Top n documents:")
-    for doc in results:
-        print(f"URL: {doc['url']} ({doc['score']}) \nTitle: {doc['title']}\n")
 
-    print(f"+-------- {XGB_TOP_K} results in {start - time.time()} seconds ({bm25_time} + {start - bm25_time}) --------+")
-    return
+    BM25_results = [
+        {"index": i, "title": titles[i], "url": urls[i], "score": scores[i], "body": corpus[i]} for i in top_50_scores_indices[:XGB_TOP_K]
+    ]
+
+    print(f"+-------- {XGB_TOP_K} results in {total_time:.2f} seconds (BM25: {bm25_time:.2f}s + XGBoost: {xgb_time:.2f}s) --------+")
 
     # save the results
-    with open(f"./retriever/results/{query}_results.txt", "w") as f:
-        for i, res in enumerate(top_n_results):
-            f.write(f"{i+1}. {res[1]} ({res[0]}) - {res[2]}\n")
+    # Save the results
+    with open(f"./retriever/results/{query}_XGB_results.txt", "w") as f:
+        for i, res in enumerate(XGB_results):
+            f.write(f"{i+1}. Title: {res['title']} (Score: {res['score']:.4f}) (Document No. {res['index']})\n   URL: {res['url']}\n\n")
 
-    if BENCHMARK_WITH_BM25S:
-        with open(f"./retriever/results/{query}_results_bm.txt", "w") as f:
-            for i, res in enumerate(zip(scores_bm, results_bm)):
-                f.write(f"{i+1}. {res[0]} ({res[1]})\n")
+    with open(f"./retriever/results/{query}_BM25_results.txt", "w") as f:
+        for i, res in enumerate(BM25_results):
+            f.write(f"{i+1}. Title: {res['title']} (Score: {res['score']:.4f}) (Document No. {res['index']})\n   URL: {res['url']}\n\n")
 
 if __name__ == '__main__':
     main()

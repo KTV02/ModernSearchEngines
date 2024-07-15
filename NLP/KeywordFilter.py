@@ -5,10 +5,8 @@ from collections import Counter, OrderedDict
 # Add the directories to the system path
 sys.path.append(os.path.abspath('../retriever/'))
 
-# Import MyClass from lib/nested/my_class
-from retriever.vectorspace import VectorSpaceModel
 
-
+#can read the NLPOutput.txt file and returns the contents (as token lists), urls and titles used for ranking
 def parse_tokens(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
@@ -48,7 +46,6 @@ def parse_tokens(file_path):
 
     return tokens_list, titles, urls
 
-
 def get_ordered_word_frequency(corpus):
     """
     Process the corpus to count word frequencies and order them.
@@ -74,7 +71,6 @@ if __name__ == "__main__":
     tokens_list, _, _2 = parse_tokens("NLPOutput.txt")
     print(len(tokens_list), len(_), len(_2))
     #merged_tokens_list = [' '.join(tokens) for tokens in tokens_list]
-    #print(len(merged_tokens_list))
     ordered_word_freq = get_ordered_word_frequency(tokens_list)
     with open('Keywords.txt', 'w', encoding='utf-8') as file:
         for word, freq in ordered_word_freq.items():
