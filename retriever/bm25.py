@@ -2,13 +2,14 @@
 Implement BM25 (BM25L or BM25+) with parallelization. 
 """
 import math
+from tqdm import tqdm
 from typing import Callable
 import numpy as np
 import scipy.sparse as sp
 from multiprocessing import Pool
 
 class BM25S:
-    def __init__(self, corpus, k1=1.5, b=0.75, delta=1.0, method="bm25+", num_threads=4):
+    def __init__(self, corpus, k1=1.2, b=0.75, delta=1.0, method="bm25l", num_threads=4):
         """
         Initialize BM25S with the given corpuses and parameters.
 
@@ -23,9 +24,11 @@ class BM25S:
         self.k1 = k1
         self.b = b
         self.delta = delta
+        assert method in ["bm25l", "bm25+"], "Invalid scoring method."
         self.method = method
         self.num_threads = num_threads
 
+        assert type(corpus[0]) == list, "Corpus is not tokenized properly."
         self.corpus = corpus
         self.N = len(corpus)
         self.avgdl = sum(len(doc) for doc in corpus) / self.N
@@ -33,26 +36,27 @@ class BM25S:
 
         self._initialize()
 
+
     def _initialize(self):
         """
         Initialize the term frequency (TF) and inverse document frequency (IDF)
         matrices for the corpus.
         """
         word_count = {}
-        for doc in self.corpus:
+        for doc in tqdm(self.corpus, desc="Processing corpus"):
             for word in doc:
                 if word not in word_count:
                     word_count[word] = 0
                 word_count[word] += 1
 
         self.idf = {}
-        for word, freq in word_count.items():
+        for word, freq in tqdm(word_count.items(), desc="Calculating IDF"):
             self.idf[word] = np.log((self.N - freq + 0.5) / (freq + 0.5) + 1)
 
         self.tf = sp.dok_matrix((self.N, len(word_count)), dtype=np.float32)
         self.word_index = {word: idx for idx, word in enumerate(word_count)}
 
-        for doc_idx, doc in enumerate(self.corpus):
+        for doc_idx, doc in tqdm(enumerate(self.corpus), desc="Calculating TF", total=self.N):
             for word in doc:
                 self.tf[doc_idx, self.word_index[word]] += 1
 
@@ -228,6 +232,7 @@ class BM25S:
 
 
 # Example Usage
+"""
 if __name__ == "__main__":
     corpus = [
         ["hello", "world"],
@@ -239,4 +244,4 @@ if __name__ == "__main__":
     query = ["hello", "foo", "ablenkung", "andereAblenkung"]
     scores = bm25.get_scores(query)
     print(scores)
-
+"""
