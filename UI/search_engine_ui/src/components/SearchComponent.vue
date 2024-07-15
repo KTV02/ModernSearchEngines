@@ -1,15 +1,15 @@
 <template>
   <div class="search-component">
+    <img src="@/assets/logoUni.png" alt="Logo" class="logo" />
     <h1>Search Engine</h1>
-    <form @submit.prevent="submitQuery">
-      <input v-model="query" type="text" placeholder="Enter your search query" />
-      <button type="submit">Search</button>
+    <form @submit.prevent="submitQuery" class="search-form">
+      <input v-model="query" type="text" placeholder="Enter your search query" class="search-input" />
+      <button type="submit" class="search-button">Search</button>
     </form>
-    <div v-if="results.length">
-      <h2>Results:</h2>
-      <ul>
-        <li v-for="(result, index) in results" :key="index">{{ result }}</li>
-      </ul>
+    <div v-if="results.relevantTitles && results.relevantTitles.length" class="results">
+      <div v-for="(title, index) in results.relevantTitles" :key="index" class="result-item">
+        <a :href="results.relevantUrls[index]" target="_blank" class="result-link">{{ title }}</a>
+      </div>
     </div>
   </div>
 </template>
@@ -21,7 +21,10 @@ export default {
   data() {
     return {
       query: '',
-      results: []
+      results: {
+        relevantTitles: [],
+        relevantUrls: []
+      }
     };
   },
   methods: {
@@ -30,7 +33,7 @@ export default {
         const response = await axios.post('http://localhost:5000/rank', {
           query: this.query
         });
-        this.results = response.data.results;
+        this.results = response.data;
       } catch (error) {
         console.error('Error fetching search results:', error);
       }
@@ -46,13 +49,51 @@ export default {
   text-align: center;
 }
 
-input {
-  width: 70%;
-  padding: 8px;
-  margin-right: 10px;
+.logo {
+  width: 150px;
+  margin-bottom: 20px;
 }
 
-button {
-  padding: 8px 16px;
+.search-form {
+  margin-bottom: 20px;
+}
+
+.search-input {
+  width: 70%;
+  padding: 10px;
+  margin-right: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.search-button {
+  padding: 10px 20px;
+  border: none;
+  background-color: #007bff;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.search-button:hover {
+  background-color: #0056b3;
+}
+
+.results {
+  text-align: left;
+  margin-top: 20px;
+}
+
+.result-item {
+  margin-bottom: 10px;
+}
+
+.result-link {
+  text-decoration: none;
+  color: #007bff;
+}
+
+.result-link:hover {
+  text-decoration: underline;
 }
 </style>
