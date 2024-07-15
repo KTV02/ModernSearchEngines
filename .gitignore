@@ -5,8 +5,6 @@ retriever/shap.csv
 webcrawler/index.db
 
 
-#ignore txt
-*.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
