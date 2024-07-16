@@ -1,5 +1,5 @@
 retriever/training_data
-retriever/data/shap.csv
+retriever/bm25_cache_new.pkl
 data/shap.csv
 retriever/shap.csv
 webcrawler/index.db
