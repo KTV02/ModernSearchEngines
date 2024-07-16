@@ -15,9 +15,9 @@ API_URL = "http://l.kremp-everest.nord:5000"
 NUM_WORKERS = 20  # Increased number of workers for better concurrency
 FILTER_CONTENT = True
 TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen', 'eberhard', 'karls',
-                      'wurmlingen', 'wolfenhausen', 'wilhelmshöhe', 'wendelsheim', 'weitenburg', 'weilheim', 'weiler',
-                      'wankheim', 'waldhörnle', 'waldhof', 'waldhausen', 'wachendorf', 'unterjesingen', 'landkreis tübingen',
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen',
+                      'wurmlingen', 'wolfenhausen', 'wilhelmshöhe', 'wendelsheim', 'weitenburg', 'weilheim',
+                      'wankheim', 'waldhörnle', 'waldhausen', 'wachendorf', 'unterjesingen', 'landkreis tübingen',
                       'tübingen', 'talheim', 'sulzau', 'sülchen', 'streimberg', 'stockach', 'westliche steingart', 'steinenberg',
                       'seebronn', 'schwärzloch', 'schwalldorf', 'schönbuchspitz', 'naturpark schönbuch', 'schönberger kopf',
                       'schloßlesberg', 'schloßbuckel', 'schadenweilerhof', 'saurücken', 'rottenburg', 'rosenau', 'reusten',
@@ -254,17 +254,15 @@ def main():
 
 # Setup initial URLs and call main
 initial_urls = [
-    "https://www.tuebingen.de/en/",
-    "https://en.wikipedia.org/wiki/T%C3%BCbingen",
-    "https://www.uni-tuebingen.de/en.html"
+    "https://www.eventbrite.de/d/germany--t%C3%BCbingen/events/",
+    "https://www.ubereats.com/de-en/city/t%C3%BCbingen-bw",
+    "https://www.tripadvisor.com/Tourism-g198539-Tubingen_Baden_Wurttemberg-Vacations.html"
 ]
 
 additional_urls = [
-    "https://historicgermany.travel/historic-germany/tubingen/",
-    "https://www.germansights.com/tubingen/",
-    "https://tuebingenresearchcampus.com/en/tuebingen/general-information/local-infos",
-    "https://www.germany.travel/en/cities-culture/tuebingen.html",
-    "https://uni-tuebingen.de/en/forschung/zentren-und-institute/brasilien-und-lateinamerika-zentrum/german-brazilian-symposium-2024/about-tuebingen/welcome-to-tuebingen/"
+    "https://www.tripadvisor.com/Attractions-g198539-Activities-Tubingen_Baden_Wurttemberg.html",
+    "https://www.mygermanuniversity.com/universities/University-of-Tuebingen",
+    "https://en.wikivoyage.org/wiki/T%C3%BCbingen"
 ]
 
 if __name__ == "__main__":
