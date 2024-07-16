@@ -29,6 +29,7 @@ BM25_PATH = "./retriever/bm25_cache.pkl"
 SAVE_MODEL = True
 XGB_TOP_K = 10 
 OLLAMA_AVAILABLE = True # you need to install that.
+DEBUG = False # if ollama unavailable and you want to research multiple queries
 
 def input_query():
     user_input = input("Please type your query and press Enter: ")
@@ -114,15 +115,15 @@ def main():
 
     if OLLAMA_AVAILABLE: 
         print("Generating queries using LLM...")
-        # else you could define some dummies here.
-
-        # [['food', '&', 'beverages'], ['eating', '&', 'drinking'], ['cuisine', '&', 'cocktails'], ['restaurants', '&', 'cafes'], ['meals', '&', 'refreshments'], ['food', 'and', 'drinks']]
+        # takes a few seconds 
         q_preprocessor = QueryPreprocessor(query)
         five_queries = q_preprocessor.generate_search_queries_ollama()
         six_queries = five_queries + [query]
         tok_query = [tokenize(i) for i in six_queries]
         print(tok_query)
         # we could also add the words with the most similiar Glove Embedding here
+    elif DEBUG:
+        tok_query = [['food', '&', 'beverages'], ['eating', '&', 'drinking'], ['cuisine', '&', 'cocktails'], ['restaurants', '&', 'cafes'], ['meals', '&', 'refreshments'], ['food', 'and', 'drinks']] + [tokenize(query)]
     else:
         print("Not using Query processing.")
         tok_query = [tokenize(query)]
@@ -143,14 +144,18 @@ def main():
     for i in range(x.shape[0]):
         for j in range(x.shape[1]):
             index = y[i, j]
-            sum_dict[index] += x[i, j]
+            sum_dict[index] += x[i, j] # get the score from x at the exact position 
 
     sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True)
     sorted_indices = [item[0] for item in sorted_sums]
-    print(sorted_indices)
+    sorted_sums_values = [item[1] for item in sorted_sums]
+    top_n = min(50, len(sorted_indices))
+
+    # get the top index from the overall map 
+    top_indices = sorted_indices[:top_n]
 
     documents = []
-    for index in sorted_indices:
+    for index in top_indices:
         documents.append({"body": " ".join(corpus[index]), "title": titles[index], "url": urls[index]})
 
     # get top 50 results for XGBoost and get XGB predictions
@@ -165,14 +170,14 @@ def main():
     total_time = time.time() - start_total
 
     XGB_results = [
-        {"index": top_50_scores_indices[i], "title": titles[top_50_scores_indices[i]], 
-         "url": urls[top_50_scores_indices[i]], "score": y_pred[i], 
-         "body": corpus[top_50_scores_indices[i]]} for i in XGB_top_indices
+        {"index": top_indices[i], "title": titles[top_indices[i]], 
+         "url": urls[top_indices[i]], "score": y_pred[i], 
+         "body": corpus[top_indices[i]]} for i in XGB_top_indices
     ]
     
     BM25_results = [
-        {"index": i, "title": titles[i], "url": urls[i], "score": scores[i], 
-         "body": corpus[i]} for i in top_50_scores_indices[:XGB_TOP_K]
+        {"index": i, "title": titles[i], "url": urls[i], "score": sum_dict[i], 
+         "body": corpus[i]} for i in top_indices[:XGB_TOP_K]
     ]
 
     print(f"+-------- {XGB_TOP_K} results in {total_time:.2f} seconds (BM25: {bm25_time:.2f}s + XGBoost: {xgb_time:.2f}s) --------+")

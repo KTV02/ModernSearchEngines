@@ -2,6 +2,8 @@ import requests
 import json
 import ast
 from langchain_community.llms import Ollama
+from langchain.output_parsers import CommaSeparatedListOutputParser
+from langchain_core.prompts import PromptTemplate
 import gensim.downloader as api
 
 class QueryPreprocessor:
@@ -11,45 +13,32 @@ class QueryPreprocessor:
         """
         self.model = model
         self.query_string = query_string
-    
-    def _is_list_response(self, response_text):
-        try:
-            # Find the first occurrence of '[' and the last occurrence of ']'
-            start_index = response_text.find('[')
-            end_index = response_text.rfind(']') + 1
-            
-            # Extract the substring that should be the list
-            if start_index != -1 and end_index != -1:
-                list_str = response_text[start_index:end_index]
-                
-                # Ensure the response text is a properly encoded string
-                list_str = list_str.encode('latin1').decode('utf-8')
-                
-                # Safely evaluate the substring as a Python expression
-                response_list = ast.literal_eval(list_str)
-                return response_list if isinstance(response_list, list) else False
-            else:
-                return False
-        except (ValueError, SyntaxError, UnicodeDecodeError):
-            return False
 
     def generate_search_queries_ollama(self, retries=3):
         """
         Please install ollama and run ollama pull gemma2
 
         """
-        prompt = f"""Rephrase this search engines query 5 times: {self.query_string}. Output as python, comma-separated list."""
+        prompt = f"""Rephrase this search engines query 5 times, without changing the meaning: {self.query_string}. Queries must be city of Tübingen related. Output as python, comma-separated list."""
         
         for attempt in range(retries):
             try:
                 llm = Ollama(model=self.model)  # assuming you have Ollama installed and have gemma2 model pulled
 
-                result = llm.invoke(prompt)
+                output_parser = CommaSeparatedListOutputParser()
+                format_instructions = output_parser.get_format_instructions()
+                prompt = PromptTemplate(
+                    template="Rephrase this search engines query 5 times, without changing the meaning: {query}. Queries must be city of Tübingen related.\n{format_instructions}",
+                    input_variables=["query"],
+                    partial_variables={"format_instructions": format_instructions},
+                )
 
-                result_list = self._is_list_response(result)
-                
-                if result_list:
-                    return result_list
+                chain = prompt | llm | output_parser
+
+                result = chain.invoke({"query": self.query_string})
+
+                if result:
+                    return result
                 else:
                     raise ValueError(f"Response {result} is not a list")
             except (requests.RequestException, ValueError) as e:

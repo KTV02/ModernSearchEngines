@@ -279,7 +279,7 @@ if __name__ == "__main__":
 
     # Iterate over the score and index arrays to calculate sums
     for i in range(x.shape[0]):
-        for j in range(x.shape[1]):
+        for j in range(x.shape[1]): # x and y have the same length
             index = y[i, j]
             sum_dict[index] += x[i, j]
 
