@@ -9,6 +9,7 @@ References:
 """
 import math
 from typing import List, Tuple
+from collections import defaultdict, Counter
 import numpy as np
 import scipy.sparse as sp
 from functools import partial
@@ -48,23 +49,7 @@ class BM25S:
         Initialize the term frequency (TF) and inverse document frequency (IDF)
         matrices for the corpus.
         """
-        term_frequencies = {}  # To store term frequencies
-        doc_freqs = {}   # To store document frequencies
-        total_terms = 0
-
-        for doc in tqdm(self.corpus, desc="Processing corpus"):
-            total_terms += len(doc)
-            unique_words_in_doc = set()  # Track unique words in the current document
-            for word in doc:
-                if word not in term_frequencies:
-                    term_frequencies[word] = 0
-                    doc_freqs[word] = 0  # Initialize document frequency for new words
-                term_frequencies[word] += 1
-                unique_words_in_doc.add(word)
-        
-            # Update document frequencies
-            for word in unique_words_in_doc:
-                doc_freqs[word] += 1
+        term_frequencies, doc_freqs, total_terms = self._compute_frequencies(corpus)
 
         self.idf = {word: self._idf(doc_freq, self.N) for word, doc_freq in doc_freqs.items()}
         self.tf = sp.dok_matrix((self.N, len(term_frequencies)), dtype=np.float32)
@@ -83,6 +68,50 @@ class BM25S:
     def get_corpus(self):
         return self.corpus
     
+    def _process_shard(self, shard):
+        term_frequencies = Counter()
+        doc_freqs = Counter()
+        total_terms = 0
+
+        for doc in shard:
+            total_terms += len(doc)
+            unique_words_in_doc = set() 
+            for word in doc:
+                # Update term frequencies: How many times does term occur globally?
+                term_frequencies[word] += 1
+                unique_words_in_doc.add(word)
+            
+            # Update document frequencies: In how many documents does term occur atleast once?
+            for word in unique_words_in_doc:
+                doc_freqs[word] += 1
+
+        return term_frequencies, doc_freqs, total_terms
+
+    def _merge_results(self, results):
+        """Merge after splitting up corpus"""
+        global_term_freqs = Counter()
+        global_doc_freqs = Counter()
+        total_terms = 0
+
+        for term_freqs, doc_freqs, terms in results:
+            global_term_freqs.update(term_freqs)
+            global_doc_freqs.update(doc_freqs)
+            total_terms += terms
+
+        return global_term_freqs, global_doc_freqs, total_terms
+
+    def _compute_frequencies(self, corpus):
+        """Split corpus into shards for efficient frequency calculation"""
+        shard_size = math.ceil(len(corpus) / self.num_threads)
+        shards = [corpus[i:i + shard_size] for i in range(0, len(corpus), shard_size)]
+
+        with Pool(processes=self.num_threads) as pool:
+            results = list(tqdm(pool.imap(self._process_shard, shards), total=len(shards), desc="Processing shards"))
+
+        global_term_freqs, global_doc_freqs, total_terms = self._merge_results(results)
+
+        return dict(global_term_freqs), dict(global_doc_freqs), total_terms
+
     def _get_topk_results(self, query_scores: np.ndarray, k: int, sorted: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
         Efficiently retrieve the top-k elements from a numpy array.
