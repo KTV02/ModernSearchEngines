@@ -50,7 +50,7 @@ class BM25S:
         Initialize the term frequency (TF) and inverse document frequency (IDF)
         matrices for the corpus.
         """
-        term_frequencies, doc_freqs, total_terms = self._compute_frequencies(corpus)
+        term_frequencies, doc_freqs, total_terms = self._compute_frequencies(self.corpus)
 
         self.idf = {word: self._idf(doc_freq, self.N) for word, doc_freq in doc_freqs.items()}
         self.tf = sp.dok_matrix((self.N, len(term_frequencies)), dtype=np.float32)
@@ -267,6 +267,7 @@ if __name__ == "__main__":
     query = [["hello", "term"]]
     x, y = bm25.retrieve(query, k=5)
     print(x)
+    print(y)
 
     query_many = [["hello", "term"], ["hello", "foo"], ["make", "ipsum"], ["long", "long", "long"]]
     x, y = bm25.retrieve(query_many, k=5)
