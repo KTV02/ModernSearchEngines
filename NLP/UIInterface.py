@@ -8,6 +8,8 @@ import KeywordFilter as kwf
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
+from retriever.bm25 import OurBM25
+
 app = Flask(__name__)
 CORS(app)
 
@@ -24,6 +26,35 @@ def rank():
     # HACK: modified bm25s to return indices instead of documents as results
     relevantTitles, relevantUrls = retrieval(query)
     return jsonify({'relevantTitles': relevantTitles, 'relevantUrls': relevantUrls})
+
+def our_retrieval(query, k=10):
+    retriever = OurBM25()
+    global titles
+    global urls
+
+    if not retriever:
+        print('ohoh')
+        return jsonify({'error': 'Retriever not yet initialized'}), 500
+
+    results, scores = retriever.retrieve(bm25s.tokenize(query), k=k)
+    relevantTitles = [titles[i] for i in results[0]]
+    relevantUrls = [urls[i] for i in results[0]]
+    print(len(relevantTitles), len(relevantUrls))
+    #return jsonify({'relevantTitles': relevantTitles, 'relevantUrls': relevantUrls})
+    return relevantTitles, relevantUrls
+
+def initialize_our_retriever():
+    global retriever
+    global titles
+    global urls
+
+    corpus, titles, urls = kwf.parse_tokens("NLPOutput.txt")
+    corpusJoined = [' '.join(tokens) for tokens in corpus]
+    print('Corpus parsed')
+    retriever = bm25s.BM25(corpus=corpusJoined, method="bm25+")
+    retriever.index(corpus)
+    print(retriever)
+    print('Retriever indexed')
 
 def retrieval(query, k=10):
     global retriever
