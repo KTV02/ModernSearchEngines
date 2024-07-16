@@ -10,10 +10,10 @@ from readability import Document
 from tqdm import tqdm
 
 class NLP_Pipeline:
-    def __init__(self, data, output_file_path='NLPOutput.txt'):
+    def __init__(self, output_file_path='NLPOutput.txt'):
         self.output_file_path = output_file_path
         self.initialize_file(self.output_file_path)
-        self.data = data
+        self.data = self.fetch_db()
 
     def initialize_file(self, file_path):
         with open(file_path, 'w') as file:
@@ -26,14 +26,40 @@ class NLP_Pipeline:
         except UnicodeEncodeError as e:
             print(f"UnicodeEncodeError: {e} for text: {text}")
 
-    def getFromDatabase(self, query):
-        url = 'http://l.kremp-everest.nord:5000/query'
-        auth = ('mseproject', 'tuebingen2024')
-        response = requests.post(url, json={'query': query}, auth=auth)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            print(f"Error executing query: {response.status_code} - {response.text}")
+    def fetch_db(self, limit: int=None, 
+                auth = ('mseproject', 'tuebingen2024'), 
+                url = 'http://l.kremp-everest.nord:5000/query',
+                columns=["url", "title", "content"]) -> list[tuple]:
+        """
+        Query the database to select specified columns with an optional limit.
+        Args:
+            columns (list): List of column names to select.
+            limit (int, optional): The number of results to return. Default is None.
+        Returns:
+            list: List of tuples containing the query results.
+        """
+
+        print("Fetching data from the database...")
+
+        # Construct the SELECT clause of the query
+        columns_str = ', '.join(columns)
+        query = f'SELECT {columns_str} FROM documents'
+        if limit is not None:
+            query += f' LIMIT {limit}'
+
+        try:
+            response = requests.post(url, json={'query': query}, auth=auth)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+
+            data = response.json()
+            if data:
+                return data
+            else:
+                print("No data returned.")
+                return None
+        except requests.exceptions.RequestException as e:
+            print(f"Error executing query: {e}")
+            return -1
 
     def clean_html_content(self, html_content):
         try:
