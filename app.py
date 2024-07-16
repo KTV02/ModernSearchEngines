@@ -3,8 +3,8 @@ import time
 import pickle
 import requests
 from multiprocessing import cpu_count
-from retriever.bm25 import BM25S
-#from retriever.query_preprocessor import QueryPreprocessor  #NOTE not used yet
+from retriever.bm25 import OurBM25
+from retriever.query_preprocessor import QueryPreprocessor  
 from retriever.compute_features import tokenize, PrecomputedDocumentFeatures
 from NLP.KeywordFilter import parse_tokens
 from NLP.NLPPipeline import NLP_Pipeline
@@ -22,12 +22,13 @@ import numpy as np
 #nltk.download('wordnet')
 
 # set globals
-READ_INDEX = True  # True: index will be read from DB and NLP pipeline performed on it, False: Use NLP_Output.txt
+READ_INDEX = False  # True: index will be read from DB and NLP pipeline performed on it, False: Use NLP_Output.txt
 NLP_OUTPUT_PATH = "./NLP/NLPOutput.txt"
 LOAD_BM25 = False
 BM25_PATH = "./retriever/bm25_cache.pkl"
 SAVE_MODEL = True
-XGB_TOP_K = 10
+XGB_TOP_K = 10 
+OLLAMA_AVAILABLE = True # you need to install that.
 
 def input_query():
     user_input = input("Please type your query and press Enter: ")
@@ -86,21 +87,23 @@ def main():
     if READ_INDEX:
         print("Reading index from database...")
         data = query_db(columns=["url", "title", "content"])
+        print(len(data))
         print("...and running NLP pipeline...")
         nlp_pipeline = NLP_Pipeline(data, output_file_path=NLP_OUTPUT_PATH)
         nlp_pipeline.process_documents()
         print("NLP pipeline completed.")
     
     corpus, titles, urls = kwf.parse_tokens(NLP_OUTPUT_PATH)
+    print("Doc count: " + str(len(corpus)))
     
     # Create or load the BM25 model and index the corpus
     if LOAD_BM25 and os.path.exists(BM25_PATH):
         print("Loading BM25 model from cache...")
-        retriever = BM25S.load_from_pkl(BM25_PATH)
+        retriever = OurBM25.load_from_pkl(BM25_PATH)
         print("BM25 model loaded from cache.")
     else:
         print("Creating BM25 model...")
-        retriever = BM25S(corpus, num_threads=cpu_count())
+        retriever = OurBM25(corpus, num_threads=cpu_count())
         if SAVE_MODEL:
             os.makedirs(os.path.dirname(BM25_PATH), exist_ok=True)
             retriever.save_to_pkl(BM25_PATH)
@@ -108,19 +111,46 @@ def main():
         print("BM25 model created.")
 
     query = "food and drinks"
+
+    if OLLAMA_AVAILABLE: 
+        print("Generating queries using LLM...")
+        # else you could define some dummies here.
+
+        # [['food', '&', 'beverages'], ['eating', '&', 'drinking'], ['cuisine', '&', 'cocktails'], ['restaurants', '&', 'cafes'], ['meals', '&', 'refreshments'], ['food', 'and', 'drinks']]
+        q_preprocessor = QueryPreprocessor(query)
+        five_queries = q_preprocessor.generate_search_queries_ollama()
+        six_queries = five_queries + [query]
+        tok_query = [tokenize(i) for i in six_queries]
+        print(tok_query)
+        # we could also add the words with the most similiar Glove Embedding here
+    else:
+        print("Not using Query processing.")
+        tok_query = [tokenize(query)]
+
     start_total = time.time()
-    tok_query = tokenize(query)
     assert isinstance(tok_query, list), "Query is not tokenized properly."
 
     # Query the corpus and get top-k results
     print("Retrieving results...")
     start_bm25 = time.time()
-    scores = retriever._score(tok_query)
+    x, y = retriever.retrieve(tok_query, k=50, sorted=True)
+    print(y)
     bm25_time = time.time() - start_bm25
-    top_50_scores, top_50_scores_indices = retriever._get_topk_results(scores, k=50, sorted=True)
+
+    sum_dict = {i: 0 for i in range(len(corpus))}
+
+    # Iterate over the score and index arrays to calculate sums
+    for i in range(x.shape[0]):
+        for j in range(x.shape[1]):
+            index = y[i, j]
+            sum_dict[index] += x[i, j]
+
+    sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True)
+    sorted_indices = [item[0] for item in sorted_sums]
+    print(sorted_indices)
 
     documents = []
-    for index in top_50_scores_indices:
+    for index in sorted_indices:
         documents.append({"body": " ".join(corpus[index]), "title": titles[index], "url": urls[index]})
 
     # get top 50 results for XGBoost and get XGB predictions

@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pickle
 
 
-class BM25S:
+class OurBM25:
     def __init__(self, corpus, k1=1.2, b=0.75, num_threads=4):
         """
         Initialize BM25S with the given corpuses and parameters.
@@ -263,14 +263,33 @@ if __name__ == "__main__":
         "frequencies", "and", "term", "frequencies", "are", "calculated", "properly"
         ]
     ]
-    bm25 = BM25S(corpus, num_threads=4)
+    bm25 = OurBM25(corpus, num_threads=4)
     query = [["hello", "term"]]
-    x, y = bm25.retrieve(query, k=5)
+    x, y = bm25.retrieve(query_tokens=query, k=5, sorted=True)
     print(x)
     print(y)
 
-    query_many = [["hello", "term"], ["hello", "foo"], ["make", "ipsum"], ["long", "long", "long"]]
-    x, y = bm25.retrieve(query_many, k=5)
+    query_many = [["hello", "term"], ["hello", "foo"], ["hello", "ipsum"], ["hello", "long", "long"]]
+    x, y = bm25.retrieve(query_tokens=query_many, k=5, sorted=True)
     print(x)
+    print(y)
+
+    # Initialize a dictionary to hold the sums
+    sum_dict = {i: 0 for i in range(5)}
+
+    # Iterate over the score and index arrays to calculate sums
+    for i in range(x.shape[0]):
+        for j in range(x.shape[1]):
+            index = y[i, j]
+            sum_dict[index] += x[i, j]
+
+    # Convert the sums to a list of tuples and sort them
+    sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True)
+
+    # Extract the sorted sums and their corresponding indices
+    sorted_indices = [item[0] for item in sorted_sums]
+    sorted_sums_values = [item[1] for item in sorted_sums]
+    print(sorted_indices)
+    print(sorted_sums_values)
     #scores = bm25.score(query)
     #print(scores)
