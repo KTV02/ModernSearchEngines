@@ -16,6 +16,7 @@ from functools import partial
 from tqdm import tqdm
 from multiprocessing import Pool
 from concurrent.futures import ThreadPoolExecutor
+import pickle
 
 
 class BM25S:
@@ -220,6 +221,30 @@ class BM25S:
         """
         return float(math.log(1 + (doc_count - doc_freq + 0.5) / (doc_freq + 0.5)))
 
+    def save_to_pkl(self, filename: str):
+        """
+        Save the BM25S instance to a pickle file.
+
+        Parameters:
+        - filename: The name of the file to save the instance.
+        """
+        with open(filename, 'wb') as f:
+            pickle.dump(self, f)
+    
+    @staticmethod
+    def load_from_pkl(filename: str):
+        """
+        Load a BM25S instance from a pickle file.
+
+        Parameters:
+        - filename: The name of the file to load the instance from.
+        
+        Returns:
+        - BM25S instance.
+        """
+        with open(filename, 'rb') as f:
+            return pickle.load(f)
+            
 # Example Usage
 if __name__ == "__main__":
     corpus = [
