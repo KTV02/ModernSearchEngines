@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 from collections import Counter
 
 # Connect to the SQLite database
-db_path = 'current.db'
+db_path = 'uberEatsStartingPoint.db'
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 

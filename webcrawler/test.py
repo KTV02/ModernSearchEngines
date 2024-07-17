@@ -2,7 +2,7 @@ import requests
 
 # Use the internal IP address of your Raspberry Pi
 url = 'http://l.kremp-everest.nord:5000/query'
-query = 'SELECT COUNT(*) AS count FROM frontier where crawled=0'
+query = 'SELECT * FROM documents where url="https://www.mygermanuniversity.com/universities/University-of-Tuebingen"'
 
 # Basic authentication details
 auth = ('mseproject', 'tuebingen2024')
@@ -14,6 +14,7 @@ response = requests.post(url, json={'query': query}, auth=auth)
 if response.status_code == 200:
     # Parse the JSON response
     data = response.json()
+    print(data)
     if data:
         count = data[0]['count']
         print(f"Total documents count: {count}")

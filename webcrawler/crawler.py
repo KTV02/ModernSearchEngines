@@ -4,18 +4,19 @@ import asyncio
 from bs4 import BeautifulSoup
 import datetime
 from langdetect import detect, LangDetectException
-from tqdm import tqdm
+from tqdm.asyncio import tqdm_asyncio
 from urllib.parse import urljoin, urlparse
 import requests
 import logging
 from tenacity import retry, wait_exponential, stop_after_attempt
 
 # define globals
-API_URL = "http://l.kremp-everest.nord:5000"  
-NUM_WORKERS = 20  # Increased number of workers for better concurrency
+API_URL = "http://l.kremp-everest.nord:5000"
+NUM_WORKERS = 20  
 FILTER_CONTENT = True
-TIMEOUT = 15
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen',
+TIMEOUT = 10
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen',  # Add more keywords if needed
                       'wurmlingen', 'wolfenhausen', 'wilhelmshöhe', 'wendelsheim', 'weitenburg', 'weilheim',
                       'wankheim', 'waldhörnle', 'waldhausen', 'wachendorf', 'unterjesingen', 'landkreis tübingen',
                       'tübingen', 'talheim', 'sulzau', 'sülchen', 'streimberg', 'stockach', 'westliche steingart', 'steinenberg',
@@ -73,7 +74,8 @@ def setup_database(api_url, drop_existing=False):
     execute_query(api_url, '''
     CREATE TABLE IF NOT EXISTS frontier (
         url TEXT PRIMARY KEY,
-        crawled INTEGER DEFAULT 0
+        crawled INTEGER DEFAULT 0,
+        error INTEGER DEFAULT 0
     )''')
     execute_query(api_url, '''
     CREATE TABLE IF NOT EXISTS documents (
@@ -104,6 +106,14 @@ def update_frontier_status_batch(urls, api_url):
         execute_query(api_url, query, params)
     logger.info("Batch of %d URLs updated in frontier.", len(urls))
 
+def mark_frontier_error(url, api_url):
+    query = '''
+    UPDATE frontier SET error = 1 WHERE url = ?
+    '''
+    params = (url,)
+    execute_query(api_url, query, params)
+    logger.info("URL marked with error: %s", url)
+
 def count_remaining_frontier(api_url):
     query = "SELECT count(*) AS count FROM frontier WHERE crawled = 0"
     result = execute_query(api_url, query)
@@ -119,18 +129,28 @@ def get_total_indexed_docs(api_url):
         return result[0]['count']
     return 0
 
+def check_if_url_exists(url, api_url):
+    query = "SELECT 1 FROM frontier WHERE url = ? UNION SELECT 1 FROM documents WHERE url = ?"
+    params = (url, url)
+    result = execute_query(api_url, query, params)
+    return result is not None and len(result) > 0
+
 def initialize_frontier(initial_urls, api_url):
     for url in initial_urls:
-        query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
-        params = (url,)
-        execute_query(api_url, query, params)
-    logger.info("Frontier initialized.")
+        if not check_if_url_exists(url, api_url):
+            query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
+            params = (url,)
+            execute_query(api_url, query, params)
+            logger.info("URL added to frontier: %s", url)  # Log each URL being added to frontier
+        else:
+            logger.info("URL already exists in frontier or documents: %s", url)  # Log URLs that already exist
 
 ### --- CRAWLER FUNCTIONS --- ###
 
 @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
 async def fetch_url(session, url):
-    async with session.get(url, timeout=TIMEOUT) as response:
+    headers = {"User-Agent": USER_AGENT}
+    async with session.get(url, headers=headers, timeout=TIMEOUT) as response:
         response.raise_for_status()
         return await response.text()
 
@@ -168,12 +188,17 @@ async def crawl_page(session, url, keywords=None):
         title = soup.title.string if soup.title else "N/A"
         content = ' '.join(soup.stripped_strings)
 
+        logger.info("Crawling URL: %s", url)  # Log URL being crawled
+        logger.info("Page content length: %d", len(content))  # Log content length
+
         if FILTER_CONTENT and keywords:
             if not any(word in content.lower() for word in keywords):
+                logger.info("Content filtered out based on keywords: %s", url)  # Log filtering action
                 return None
 
             try:
                 if detect(content) != 'en':
+                    logger.info("Content filtered out based on language: %s", url)  # Log filtering action
                     return None
             except LangDetectException:
                 return None
@@ -188,18 +213,22 @@ async def crawl_page(session, url, keywords=None):
             'timestamp': datetime.datetime.now().isoformat()
         }
 
-        # If the page is relevant, return the document
+        logger.info("Document would be added: %s", doc['url'])  # Log document details
         return doc
 
     except Exception as e:
-        logger.error("Exception encountered at %s: %s", url, e)
+        if isinstance(e, aiohttp.ClientResponseError):
+            logger.error("Exception encountered at %s: %s %s", url, e.status, e.message)
+        else:
+            logger.error("Exception encountered at %s: %s", url, e)
+        mark_frontier_error(url, API_URL)
         return None
 
 async def crawl(api_url):
     total_to_crawl = count_remaining_frontier(api_url)
 
     async with aiohttp.ClientSession() as session:
-        with tqdm(total=total_to_crawl, desc="Crawling Progress", unit="page") as pbar:
+        with tqdm_asyncio(total=total_to_crawl, desc="Crawling Progress", unit="page") as pbar:
             while True:
                 query = "SELECT url FROM frontier WHERE crawled = 0 LIMIT 100"
                 result = execute_query(api_url, query)
@@ -223,9 +252,10 @@ async def crawl(api_url):
 
                 # Add outgoing links of relevant pages to the frontier
                 for link in outgoing_links:
-                    query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
-                    params = (link,)
-                    execute_query(api_url, query, params)
+                    if not check_if_url_exists(link, api_url):
+                        query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
+                        params = (link,)
+                        execute_query(api_url, query, params)
 
                 update_frontier_status_batch(urls, api_url)
                 pbar.update(len(urls))
@@ -254,15 +284,23 @@ def main():
 
 # Setup initial URLs and call main
 initial_urls = [
+    "https://www.tuebingen.de/en/",
     "https://www.eventbrite.de/d/germany--t%C3%BCbingen/events/",
     "https://www.ubereats.com/de-en/city/t%C3%BCbingen-bw",
-    "https://www.tripadvisor.com/Tourism-g198539-Tubingen_Baden_Wurttemberg-Vacations.html"
+    "https://www.tripadvisor.com/Tourism-g198539-Tubingen_Baden_Wurttemberg-Vacations.html",
+    "https://www.uni-tuebingen.de/en.html"
 ]
 
 additional_urls = [
     "https://www.tripadvisor.com/Attractions-g198539-Activities-Tubingen_Baden_Wurttemberg.html",
+    "https://en.wikipedia.org/wiki/T%C3%BCbingen",
+    "https://historicgermany.travel/historic-germany/tubingen/",
     "https://www.mygermanuniversity.com/universities/University-of-Tuebingen",
-    "https://en.wikivoyage.org/wiki/T%C3%BCbingen"
+    "https://www.germansights.com/tubingen/",
+    "https://en.wikivoyage.org/wiki/T%C3%BCbingen",
+    "https://tuebingenresearchcampus.com/en/tuebingen/general-information/local-infos",
+    "https://www.germany.travel/en/cities-culture/tuebingen.html",
+    "https://uni-tuebingen.de/en/forschung/zentren-und-institute/brasilien-und-lateinamerika-zentrum/german-brazilian-symposium-2024/about-tuebingen/welcome-to-tuebingen/"
 ]
 
 if __name__ == "__main__":
