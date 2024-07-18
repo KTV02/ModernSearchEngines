@@ -12,7 +12,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 
 # define globals
 API_URL = "http://l.kremp-everest.nord:5000"
-NUM_WORKERS = 20  
+NUM_WORKERS = 12  
 FILTER_CONTENT = True
 TIMEOUT = 10
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -243,22 +243,28 @@ async def crawl(api_url):
                 pages = await asyncio.gather(*tasks, return_exceptions=True)
 
                 docs = [page for page in pages if page is not None]
-                index_doc_batch(docs, api_url)
+                if docs:
+                    index_doc_batch(docs, api_url)
 
-                relevant_urls = [doc['url'] for doc in docs]
-                outgoing_links = set()
-                for doc in docs:
-                    outgoing_links.update(doc['outgoing_links'])
+                    relevant_urls = [doc['url'] for doc in docs]
+                    outgoing_links = set()
+                    for doc in docs:
+                        outgoing_links.update(doc['outgoing_links'])
 
-                # Add outgoing links of relevant pages to the frontier
-                for link in outgoing_links:
-                    if not check_if_url_exists(link, api_url):
-                        query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
-                        params = (link,)
-                        execute_query(api_url, query, params)
+                    # Add outgoing links of relevant pages to the frontier
+                    for link in outgoing_links:
+                        if not check_if_url_exists(link, api_url):
+                            query = "INSERT OR IGNORE INTO frontier (url) VALUES (?)"
+                            params = (link,)
+                            execute_query(api_url, query, params)
 
-                update_frontier_status_batch(urls, api_url)
-                pbar.update(len(urls))
+                    update_frontier_status_batch(relevant_urls, api_url)
+                    pbar.update(len(urls))
+                else:
+                    # Mark non-crawled URLs with errors to prevent retrying them
+                    for url in urls:
+                        mark_frontier_error(url, api_url)
+                    pbar.update(len(urls))
 
 def is_relevant_content(text, keywords, threshold=0.05):
     processed_text = preprocess(text)

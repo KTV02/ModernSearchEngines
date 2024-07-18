@@ -3,12 +3,12 @@ from urllib.parse import urlparse
 from collections import Counter
 
 # Connect to the SQLite database
-db_path = 'uberEatsStartingPoint.db'
+db_path = 'frontier.db'
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 # Query to select all URLs from the documents table
-query = "SELECT url FROM documents"
+query = "SELECT url FROM frontier"
 cursor.execute(query)
 
 # Fetch all URLs

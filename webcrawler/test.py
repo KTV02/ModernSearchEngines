@@ -2,7 +2,7 @@ import requests
 
 # Use the internal IP address of your Raspberry Pi
 url = 'http://l.kremp-everest.nord:5000/query'
-query = 'SELECT * FROM documents where url="https://www.mygermanuniversity.com/universities/University-of-Tuebingen"'
+query = 'SELECT Count(*) FROM frontier where crawled=1'
 
 # Basic authentication details
 auth = ('mseproject', 'tuebingen2024')
