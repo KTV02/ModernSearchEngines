@@ -1,0 +1,30 @@
+1. Title: Bebenhausen Monastery and Palace (Score: 0.1596) (Document No. 2)
+   URL: http://www.kloster-bebenhausen.de/en/home/
+
+2. Title: Italy – Travel guide at Wikivoyage (Score: -0.2344) (Document No. 158)
+   URL: https://en.wikivoyage.org/wiki/Italy
+
+3. Title: Germany – Travel guide at Wikivoyage (Score: -0.2344) (Document No. 54)
+   URL: https://en.wikivoyage.org/wiki/Germany
+
+4. Title: Wiesbaden – Travel guide at Wikivoyage (Score: -0.2344) (Document No. 103)
+   URL: https://en.wikivoyage.org/wiki/Wiesbaden
+
+5. Title: Tübingen – Travel guide at Wikivoyage (Score: -0.3333) (Document No. 0)
+   URL: https://en.wikivoyage.org/wiki/T%C3%BCbingen
+
+6. Title: Tübingen – Travel guide at Wikivoyage (Score: -0.3333) (Document No. 23)
+   URL: https://en.wikivoyage.org/w/index.php?title=T%C3%BCbingen&printable=yes
+
+7. Title: Tübingen – Travel guide at Wikivoyage (Score: -0.3333) (Document No. 78)
+   URL: https://en.m.wikivoyage.org/w/index.php?title=T%C3%BCbingen&mobileaction=toggle_view_mobile
+
+8. Title: Tübingen – Travel guide at Wikivoyage (Score: -0.3333) (Document No. 133)
+   URL: https://en.wikivoyage.org/w/index.php?title=T%C3%BCbingen&oldid=4620073
+
+9. Title: Stuttgart – Travel guide at Wikivoyage (Score: -0.4002) (Document No. 63)
+   URL: https://en.wikivoyage.org/wiki/Stuttgart
+
+10. Title: N/A (Score: -0.4212) (Document No. 47)
+   URL: https://tools.wmflabs.org/wikivoyage/w/poi2gpx.php?print=gpx&lang=en&name=T%C3%BCbingen
+

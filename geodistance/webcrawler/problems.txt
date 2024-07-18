@@ -1,0 +1,31 @@
+# Problems
+
+## NLP Processing
+language detection (partially english /german)
+
+## Crawling
+
+### ip blocking
+- 403 responses from e.g. wikipedia =>cdn?
+
+### dynamically loaded content
+- How to transform JS scripted pages into NLP digestable documents
+
+### "Refilling" frontier
+- Which outgoing links should be added to frontier?
+- Option A: Hard string matching (e.g. Tuebingen)
+    - Problem: Probably too narrow definition
+    - Not all topically relevant URLs contain some form of Tuebingen, t%c3%bcbingen, etc. in URL
+- Option B: Add all now, filter later
+    - Add all outgoing absolute links to frontier first
+    - Do filtering after making request and parsing HTML
+    - Problem: Explodes frontier and possibly index
+
+
+- Option C: Extended Hard string matching
+    -Collect a baseline using hard matching with e.g. Tuebingen
+    -On this baseline do some NLP to find relevant keywords related to english content about tübingen
+    -Use these keywords for extended hardmatching for the webcrawler for the final dataset
+    (In theory we could use a loooooot of keywords, comparing the URL to even 1000+ keyword strings should not affect performance)
+    - This option still has the issue that we already preselect what our ranker can even rank as relevant, but because 
+      we can not create our index on the whole internet, some sort of preselection is needed
