@@ -171,3 +171,9 @@ cython_debug/
 webcrawler/big.db
 webcrawler/initialStartingPoints.db
 webcrawler/uberEatsStartingPoint.db
+webcrawler/crawler.db
+webcrawler/frontier.db
+webcrawler/new.db
+webcrawler/website.txt
+webcrawler/sync_status.json
+webcrawler/crawler.db
