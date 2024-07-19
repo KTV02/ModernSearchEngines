@@ -109,7 +109,7 @@ def retrieval(query, k=50):
         relevantUrls = []
         for index in XGB_top_indices:
             relevantTitles.append(titles[top_indices[index]])
-            relevantUrls.append(titles[top_indices[index]])
+            relevantUrls.append(urls[top_indices[index]])
         print(f"+-------- {XGB_TOP_K} results in {total_time:.2f} seconds (BM25: {bm25_time:.2f}s + XGBoost: {xgb_time:.2f}s) --------+")
         #print only to be able to directly compare bm25 with xgboost
         topicModelingOutput = []
