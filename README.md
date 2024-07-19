@@ -1,3 +1,9 @@
+# Frontend + Backend
+
+Steps to reproduce:
+- Go inside ./NLP/ and run the UIInterface class.
+- Go inside ./UI/search_engine_ui. Do npm install. Do npm run serve
+
 # Remote Database Guide
 
 ## Steps to Setup Meshnet
