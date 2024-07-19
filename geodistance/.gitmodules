@@ -1,0 +1,3 @@
+[submodule "GeoIR"]
+	path = GeoIR
+	url = https://github.com/erikinfo/GeoIR.git
