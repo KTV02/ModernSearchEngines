@@ -3,12 +3,12 @@ from urllib.parse import urlparse
 from collections import Counter
 
 # Connect to the SQLite database
-db_path = 'frontier.db'
+db_path = 'new.db'
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 # Query to select all URLs from the documents table
-query = "SELECT url FROM frontier"
+query = "SELECT url FROM documents"
 cursor.execute(query)
 
 # Fetch all URLs
