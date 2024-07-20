@@ -28,7 +28,7 @@ NLP_OUTPUT_PATH = "NLPOutput.txt"
 LOAD_BM25 = True
 BM25_PATH = "./retriever/bm25_cache.pkl"
 SAVE_MODEL = True
-OLLAMA_AVAILABLE = False
+OLLAMA_AVAILABLE = True
 XGB_TOP_K = 10
 USE_XGB = True
 titles = []
@@ -98,7 +98,6 @@ def retrieval(query, k=50):
     start_bm25 = time.time()
     x, y = retriever.retrieve(tok_query, k=k, sorted=True)
     bm25_time = time.time() - start_bm25
-
     sum_dict = {i: 0 for i in range(len(corpus))}
 
     # Iterate over the score and index arrays to calculate sums
@@ -110,11 +109,9 @@ def retrieval(query, k=50):
     sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True)
     sorted_indices = [item[0] for item in sorted_sums]
     sorted_sums_values = [item[1] for item in sorted_sums]
-    top_n = min(50, len(sorted_indices))
-
+    top_n = min(k, len(sorted_indices))
     # get the top index from the overall map
     top_indices = sorted_indices[:top_n]
-
     documents = []
     #HACK: titles and urls spererately for testing
     relevantTitlesBM25 = []
@@ -149,12 +146,12 @@ def retrieval(query, k=50):
             topicModelingOutput.append([i, relevantTitlesBM25[i], relevantUrlsBM25[i], relevantContentBM25[i], x[0][i]])
             #print(i, relevantTitlesBM25[i], relevantUrlsBM25[i], relevantContentBM25[i], x[0][i])
         #HACK file output for topic modeling
-        #try:
-        #    with open("topicmodelingoutput.txt", 'a', encoding='utf-8', errors='replace') as file:
-        #        for sentence in topicModelingOutput:
-        #            file.write(str(sentence) + "\n")
-        #except UnicodeEncodeError as e:
-        #    print(f"UnicodeEncodeError: {e} for text: {text}")
+        try:
+            with open("topicmodelingoutput.txt", 'a', encoding='utf-8', errors='replace') as file:
+                for sentence in topicModelingOutput:
+                    file.write(str(sentence) + "\n")
+        except UnicodeEncodeError as e:
+            print(f"UnicodeEncodeError: {e} for text: {text}")
         return relevantTitles, relevantUrls
     else:
         print(f"+-------- {k} results in {bm25_time:.2f} seconds using BM25 --------+")

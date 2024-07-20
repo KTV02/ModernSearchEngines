@@ -177,4 +177,4 @@ webcrawler/new.db
 webcrawler/website.txt
 webcrawler/sync_status.json
 webcrawler/crawler.db
-NLPOutput.txt
+NLP/NLPOutput.txt
