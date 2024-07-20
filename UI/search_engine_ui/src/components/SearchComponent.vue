@@ -16,7 +16,9 @@
         <a :href="results.relevantUrls[index]" target="_blank" class="result-link">{{ title }}</a>
       </div>
     </div>
-    <TreeComponent v-if="showTree" />
+    <Modal_component v-if="showTree" @close="toggleTree">
+      <TreeComponent />
+    </Modal_component>
   </div>
 </template>
 
@@ -24,10 +26,12 @@
 <script>
 import axios from 'axios';
 import TreeComponent from './TreeComponent.vue';
+import Modal_component from './Modal_component.vue';
 
 export default {
   components: {
-    TreeComponent
+    TreeComponent,
+    Modal_component
   },
   data() {
     return {
