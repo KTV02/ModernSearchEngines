@@ -1,7 +1,11 @@
 <template>
   <div class="search-component">
-    <img src="@/assets/logoUni.png" alt="Logo" class="logo" />
-    <h1>Search Engine</h1>
+    <div class="logo-box">
+      <img src="@/assets/logoUni.png" alt="Logo" class="logo" />
+    </div>
+    <div class="title-box">
+      <h1>Search Engine</h1>
+    </div>
     <form @submit.prevent="submitQuery" class="search-form">
       <input v-model="query" type="text" placeholder="Enter your search query" class="search-input" />
       <button type="submit" class="search-button">Search</button>
@@ -15,6 +19,7 @@
     <TreeComponent v-if="showTree" />
   </div>
 </template>
+
 
 <script>
 import axios from 'axios';
@@ -51,7 +56,6 @@ export default {
   }
 };
 </script>
-
 <style scoped>
 .search-component {
   max-width: 600px;
@@ -59,9 +63,29 @@ export default {
   text-align: center;
 }
 
+.logo-box {
+  background-color: white;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 12px; /* Add rounded corners */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 .logo {
   width: 150px;
-  margin-bottom: 20px;
+}
+
+.title-box {
+  background-color: white;
+  padding: 10px;
+  margin: 0 auto 20px auto;
+  border-radius: 12px; /* Add rounded corners */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: inline-block; /* Make the box only as big as the text */
+}
+
+.title-box h1 {
+  margin: 0;
 }
 
 .search-form {
@@ -109,6 +133,10 @@ export default {
 .results {
   text-align: left;
   margin-top: 20px;
+  background-color: white; /* Set background to white */
+  padding: 20px; /* Add padding */
+  border-radius: 12px; /* Add rounded corners */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Add box shadow */
 }
 
 .result-item {
