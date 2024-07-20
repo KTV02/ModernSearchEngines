@@ -71,7 +71,7 @@ class NLP_Pipeline:
 
         # Construct the SELECT clause of the query
         columns_str = ', '.join(columns)
-        query = f'SELECT {columns_str} FROM documents'
+        query = f'SELECT {columns_str} FROM documents LIMIT 10'
         if limit is not None:
             query += f' LIMIT {limit}'
 
