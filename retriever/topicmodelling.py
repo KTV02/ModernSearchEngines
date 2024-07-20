@@ -16,7 +16,7 @@ def flatten_list(nested_list):
 # Function to parse the text file and return a list of tuples
 def parse_results(file_path):
     results = []
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         for line in file:
             line = line.strip()
             if line:
@@ -127,7 +127,7 @@ def get_topic_arrays():
     return topic_arrays
 
 # Example usage
-file_path = 'output.txt'
+file_path = '../NLP/topicmodelingoutput.txt'
 if perform_calculations(file_path):
     search_results = get_search_results()
     print("Search Results:")

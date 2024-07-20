@@ -6,6 +6,7 @@ sys.path.append(os.path.abspath('../retriever'))
 sys.path.append(os.path.abspath('../UI'))
 sys.path.append(os.path.abspath('../'))
 import KeywordFilter as kwf
+import topicmodelling as tm
 import topicTree as tree
 import numpy as np
 from flask import Flask, request, jsonify, send_file
@@ -28,12 +29,13 @@ NLP_OUTPUT_PATH = "NLPOutput.txt"
 LOAD_BM25 = True
 BM25_PATH = "./retriever/bm25_cache.pkl"
 SAVE_MODEL = True
-OLLAMA_AVAILABLE = True
-XGB_TOP_K = 10
+OLLAMA_AVAILABLE = False
+XGB_TOP_K = 50
 USE_XGB = True
 titles = []
 urls = []
 corpus = []
+topicArray = []
 
 @app.route('/rank_batch', methods=['POST'])
 def rank_batch():
@@ -70,21 +72,25 @@ def makeTree():
 #fixed links for testing
 @app.route('/get_links', methods=['GET'])
 def get_links():
-    links = [
-        {"name": "Box 1", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#f8d7da"},
-        {"name": "Box 2", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#d4edda"},
-        {"name": "Box 3", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#d1ecf1"},
-        {"name": "Box 4", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#fff3cd"},
-        {"name": "Box 5", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#e8b3f5"}
-    ]
+    if(topicArray):
+        links = [
+            {"name": "Topic 1", "urls": [{"title": topicArray[0][0][0], "url": topicArray[0][0][1]}, {"title": topicArray[0][1][0], "url": topicArray[0][1][1]}, {"title": topicArray[0][2][0], "url": topicArray[0][2][1]}, {"title": topicArray[0][3][0], "url": topicArray[0][3][1]}, {"title": topicArray[0][4][0], "url": topicArray[0][4][1]}], "color": "#f8d7da"},
+            {"name": "Topic 2", "urls": [{"title": topicArray[1][0][0], "url": topicArray[1][0][1]}, {"title": topicArray[1][1][0], "url": topicArray[1][1][1]}, {"title": topicArray[1][2][0], "url": topicArray[1][2][1]}, {"title": topicArray[1][3][0], "url": topicArray[1][3][1]}, {"title": topicArray[1][4][0], "url": topicArray[1][4][1]}], "color": "#d4edda"},
+            {"name": "Topic 3", "urls": [{"title": topicArray[2][0][0], "url": topicArray[2][0][1]}, {"title": topicArray[2][1][0], "url": topicArray[2][1][1]}, {"title": topicArray[2][2][0], "url": topicArray[2][2][1]}, {"title": topicArray[2][3][0], "url": topicArray[2][3][1]}, {"title": topicArray[2][4][0], "url": topicArray[2][4][1]}], "color": "#d1ecf1"},
+            {"name": "Topic 4", "urls": [{"title": topicArray[3][0][0], "url": topicArray[3][0][1]}, {"title": topicArray[3][1][0], "url": topicArray[3][1][1]}, {"title": topicArray[3][2][0], "url": topicArray[3][2][1]}, {"title": topicArray[3][3][0], "url": topicArray[3][3][1]}, {"title": topicArray[3][4][0], "url": topicArray[3][4][1]}], "color": "#fff3cd"},
+            {"name": "Topic 5", "urls": [{"title": topicArray[4][0][0], "url": topicArray[4][0][1]}, {"title": topicArray[4][1][0], "url": topicArray[4][1][1]}, {"title": topicArray[4][2][0], "url": topicArray[4][2][1]}, {"title": topicArray[4][3][0], "url": topicArray[4][3][1]}, {"title": topicArray[4][4][0], "url": topicArray[4][4][1]}], "color": "#e8b3f5"}
+        ]
+    else:
+        links = [{"name": "INFO", "urls": [{"title": "please run a query first", "url": None}], "color": "#f8d7da"}]
     return jsonify(links)
 
 #k influences how many documents are retrieved by bm25 -> preranking
-def retrieval(query, k=50):
+def retrieval(query, k=100):
     global retriever
     global corpus
     global titles
     global urls
+    global topicArray
 
     if not retriever:
         print('ohoh')
@@ -131,27 +137,39 @@ def retrieval(query, k=50):
         ranker.load_model('../retriever/xgb_ranker_model.json')
         y_pred = ranker.predict(extracted_features)
         XGB_top_indices = np.argsort(y_pred)[-XGB_TOP_K:][::-1]
+        y_pred.sort()
+        y_pred = y_pred[::-1]
         xgb_time = time.time() - start_xgb
         total_time = time.time() - start_total
         relevantTitles = []
         relevantUrls = []
+        relevantContent = []
         for index in XGB_top_indices:
             relevantTitles.append(titles[top_indices[index]])
             relevantUrls.append(urls[top_indices[index]])
+            relevantContent.append(corpus[top_indices[index]])
         print(f"+-------- {XGB_TOP_K} results in {total_time:.2f} seconds (BM25: {bm25_time:.2f}s + XGBoost: {xgb_time:.2f}s) --------+")
         #print only to be able to directly compare bm25 with xgboost
         topicModelingOutput = []
-        for i in range(k):
+        for i in range(XGB_TOP_K):
             #HACK: prints content
-            topicModelingOutput.append([i, relevantTitlesBM25[i], relevantUrlsBM25[i], relevantContentBM25[i], x[0][i]])
+            topicModelingOutput.append([i, relevantTitles[i], relevantUrls[i], relevantContent[i], y_pred[i]])
+            #print(topicModelingOutput[i][1])
             #print(i, relevantTitlesBM25[i], relevantUrlsBM25[i], relevantContentBM25[i], x[0][i])
         #HACK file output for topic modeling
         try:
+            with open("topicmodelingoutput.txt", 'w') as file:
+                file.write("")
             with open("topicmodelingoutput.txt", 'a', encoding='utf-8', errors='replace') as file:
                 for sentence in topicModelingOutput:
                     file.write(str(sentence) + "\n")
         except UnicodeEncodeError as e:
             print(f"UnicodeEncodeError: {e} for text: {text}")
+        print(tm.perform_calculations("topicmodelingoutput.txt"))
+        searchResults = tm.get_search_results()
+        relevantTitles = list(searchResults["title"])
+        relevantUrls = list(searchResults["url"])
+        topicArray = tm.get_topic_arrays()
         return relevantTitles, relevantUrls
     else:
         print(f"+-------- {k} results in {bm25_time:.2f} seconds using BM25 --------+")
