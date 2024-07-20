@@ -40,20 +40,20 @@ body {
   justify-content: space-between;
   min-height: 100vh;
   text-align: center;
-  color: #2c3e50;
-  background-image: url('@/assets/background.webp'); /* Adjust the path to your image */
+  color: #ffffff;
+  background-image: url('@/assets/background.webp');
   background-size: cover;
-  background-position: center -170px; /* Move the background image further up */
+  background-position: center -170px;
   background-repeat: no-repeat;
-  background-attachment: fixed; /* Ensure the background image stays fixed during scrolling */
+  background-attachment: fixed;
 }
 
 .search-container {
-  margin-top: 85px; /* Move the search component down by 85 pixels */
+  margin-top: 85px;
 }
 
 .footer {
-  background: rgba(255, 255, 255, 0.8);
+  background: #444444; /* Changed to dark grey */
   padding: 10px 0;
   width: 100%;
   position: fixed;
@@ -68,12 +68,13 @@ body {
   margin: 0;
   padding: 5px 0;
   font-size: 1rem;
-  color: #2c3e50;
+  color: #ffffff;
 }
 
 .import-button {
   background: transparent;
-  border: 1px solid black;
+  border: 1px solid white;
+  color: white;
   padding: 10px 20px;
   cursor: pointer;
   border-radius: 4px;
@@ -81,6 +82,31 @@ body {
 }
 
 .import-button:hover {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Additional styles for SearchComponent (you may need to adjust these in the SearchComponent.vue file) */
+:deep(.search-bar) {
+  background-color: black;
+  color: white;
+}
+
+:deep(.search-engine-logo) {
+  filter: invert(1);
+}
+
+:deep(.university-logo) {
+  filter: invert(1);
+  background-color: #444444; /* Changed to dark grey */
+}
+
+:deep(.search-button) {
+  background-color: #00008B; /* Darker blue */
+  color: white;
+}
+
+:deep(.display-decision-tree-button) {
+  background-color: #006400; /* Darker green */
+  color: white;
 }
 </style>
