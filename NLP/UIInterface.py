@@ -1,14 +1,14 @@
 import sys
 import os
+import io
 import time
 sys.path.append(os.path.abspath('../retriever'))
 sys.path.append(os.path.abspath('../UI'))
 sys.path.append(os.path.abspath('../'))
-import bm25s
 import KeywordFilter as kwf
 import topicTree as tree
 import numpy as np
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from multiprocessing import cpu_count
 from bm25 import OurBM25
@@ -34,6 +34,24 @@ USE_XGB = True
 titles = []
 urls = []
 corpus = []
+
+@app.route('/rank_batch', methods=['POST'])
+def rank_batch():
+    file = request.files['file']
+    lines = file.read().decode('utf-8').splitlines()
+    results = []
+    output = io.StringIO()
+    for line in lines:
+        relevantTitles, relevantUrls = retrieval(line)
+        results.append({
+            'query': line,
+            'relevantTitles': relevantTitles,
+            'relevantUrls': relevantUrls
+        })
+        output.write(f"Query: {line}\n")
+        output.write(f"Results: {', '.join(relevantTitles)}\n\n")
+    output.seek(0)
+    return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/plain', as_attachment=True, download_name='processed_file.txt')
 
 @app.route('/rank', methods=['POST'])
 def rank():
@@ -109,7 +127,7 @@ def retrieval(query, k=50):
         relevantUrls = []
         for index in XGB_top_indices:
             relevantTitles.append(titles[top_indices[index]])
-            relevantUrls.append(titles[top_indices[index]])
+            relevantUrls.append(urls[top_indices[index]])
         print(f"+-------- {XGB_TOP_K} results in {total_time:.2f} seconds (BM25: {bm25_time:.2f}s + XGBoost: {xgb_time:.2f}s) --------+")
         #print only to be able to directly compare bm25 with xgboost
         topicModelingOutput = []
