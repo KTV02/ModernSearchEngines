@@ -35,9 +35,11 @@ export default {
   padding: 20px;
   border-radius: 8px;
   position: relative;
-  max-width: 90%;
-  max-height: 90%;
-  overflow-y: auto;
+  width: 60%;
+  height: 80%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .close-button {

@@ -1,7 +1,7 @@
 <template>
   <div class="linked-boxes">
     <div class="center-dot"></div>
-    <div v-for="(box, index) in boxes" :key="index" :class="'box box' + (index + 1)">
+    <div v-for="(box, index) in boxes" :key="index" :class="'box box' + (index + 1)" :style="{ backgroundColor: box.color }">
       <div class="box-name">{{ box.name }}</div>
       <div class="links">
         <div v-for="(link, linkIndex) in box.urls" :key="linkIndex" class="link">
@@ -41,8 +41,8 @@ export default {
 <style scoped>
 .linked-boxes {
   position: relative;
-  width: 400px;
-  height: 400px;
+  width: 600px;
+  height: 600px;
   margin: 0 auto;
   display: flex;
   justify-content: center;
@@ -59,8 +59,9 @@ export default {
 
 .box {
   position: absolute;
-  width: 120px;
-  height: 120px;
+  min-width: 100px;
+  max-width: 230px; /* Allow boxes to grow but not exceed a certain width */
+  padding: 10px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -69,7 +70,8 @@ export default {
   border: 1px solid #ccc;
   border-radius: 8px;
   background-color: #f9f9f9;
-  padding: 10px;
+  box-sizing: border-box; /* Ensure padding and border are included in the element's total width and height */
+  transform-origin: center;
 }
 
 .box-name {
@@ -84,35 +86,27 @@ export default {
 
 .link {
   margin: 5px 0;
+  word-wrap: break-word; /* Break long words to fit within the box */
 }
 
+
 .box1 {
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, -100%);
+  transform: rotate(270deg) translate(250px) rotate(-270deg);
 }
 
 .box2 {
-  top: 50%;
-  right: 0;
-  transform: translate(100%, -50%);
+  transform: rotate(198deg) translate(250px) rotate(-198deg);
 }
 
 .box3 {
-  bottom: 0;
-  left: 50%;
-  transform: translate(-50%, 100%);
+  transform: rotate(342deg) translate(250px) rotate(-342deg);
 }
 
 .box4 {
-  top: 50%;
-  left: 0;
-  transform: translate(-100%, -50%);
+  transform: rotate(126deg) translate(250px) rotate(-126deg);
 }
 
 .box5 {
-  bottom: 0;
-  right: 0;
-  transform: translate(100%, 100%);
+  transform: rotate(54deg) translate(250px) rotate(-54deg);
 }
 </style>

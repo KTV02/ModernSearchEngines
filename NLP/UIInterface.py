@@ -66,6 +66,19 @@ def makeTree():
     dtree = tree.get_tree()
     print(dtree)
     return dtree
+
+#fixed links for testing
+@app.route('/get_links', methods=['GET'])
+def get_links():
+    links = [
+        {"name": "Box 1", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#f8d7da"},
+        {"name": "Box 2", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#d4edda"},
+        {"name": "Box 3", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#d1ecf1"},
+        {"name": "Box 4", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#fff3cd"},
+        {"name": "Box 5", "urls": [{"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-1"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}, {"title": "lange links ficken wahrscheinlich komplett alles", "url": "http://example.com/1-2"}], "color": "#e8b3f5"}
+    ]
+    return jsonify(links)
+
 #k influences how many documents are retrieved by bm25 -> preranking
 def retrieval(query, k=50):
     global retriever
