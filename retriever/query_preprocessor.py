@@ -6,6 +6,11 @@ from langchain.output_parsers import CommaSeparatedListOutputParser
 from langchain_core.prompts import PromptTemplate
 import gensim.downloader as api
 
+"""
+Query Processing: Feature mit Summarizer wenn query zu lange.
+
+"""
+
 class QueryPreprocessor:
     def __init__(self, query_string: str, model="gemma2"):
         """
@@ -13,17 +18,30 @@ class QueryPreprocessor:
         """
         self.model = model
         self.query_string = query_string
+        self.is_summarized = False
 
     def generate_search_queries_ollama(self, retries=3):
         """
         Please install ollama and run ollama pull gemma2
 
         """
-        prompt = f"""Rephrase this search engines query 5 times, without changing the meaning: {self.query_string}. Queries must be city of Tübingen related. Output as python, comma-separated list."""
+        llm = Ollama(model=self.model)  # assuming you have Ollama installed and have gemma2 model pulled
+
+        if len(query_string) >= 50 and not self.is_summarized:
+            # summarize 
+            prompt = PromptTemplate(
+                    template="Summarize this search query: {query}. Directly return this without explanation.",
+                    input_variables=["query"]
+            )
+
+            chain = prompt | llm | output_parser
+            self.query_string = chain.invoke({"query": self.query_string})
+            self.is_summarized = True
+
+        #prompt = f"""Rephrase this search engines query 5 times, without changing the meaning: {self.query_string}. Queries must be city of Tübingen related. Output as python, comma-separated list."""
         
         for attempt in range(retries):
             try:
-                llm = Ollama(model=self.model)  # assuming you have Ollama installed and have gemma2 model pulled
 
                 output_parser = CommaSeparatedListOutputParser()
                 format_instructions = output_parser.get_format_instructions()
