@@ -9,7 +9,7 @@
     <form @submit.prevent="submitQuery" class="search-form">
       <input v-model="query" type="text" placeholder="Enter your search query" class="search-input" />
       <button type="submit" class="search-button">Search</button>
-      <button type="button" class="tree-button" @click="toggleTree">Display Decision Tree</button>
+      <button type="button" class="tree-button" @click="toggleTree">Display Topic modeling</button>
     </form>
     <div v-if="results.relevantTitles && results.relevantTitles.length" class="results">
       <div v-for="(title, index) in results.relevantTitles" :key="index" class="result-item">
@@ -17,7 +17,7 @@
       </div>
     </div>
     <Modal_component v-if="showTree" @close="toggleTree">
-      <TreeComponent />
+      <LinkedBoxes />
     </Modal_component>
   </div>
 </template>
@@ -25,12 +25,12 @@
 
 <script>
 import axios from 'axios';
-import TreeComponent from './TreeComponent.vue';
 import Modal_component from './Modal_component.vue';
+import LinkedBoxes from './LinkedBoxes.vue';
 
 export default {
   components: {
-    TreeComponent,
+    LinkedBoxes,
     Modal_component
   },
   data() {
