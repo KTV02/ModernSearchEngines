@@ -7,10 +7,14 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from langdetect import detect, LangDetectException
 from urllib.parse import urlparse, urlunparse, urljoin
-import sync_database  # Import your sync script
+import logging
 
 # Initialize database connection
 DATABASE_URL = 'new.db'
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 initial_urls = [
     "https://www.tuebingen.de/en/",
@@ -29,12 +33,12 @@ initial_urls = [
     "https://uni-tuebingen.de/en/forschung/zentren-und-institute/brasilien-und-lateinamerika-zentrum/german-brazilian-symposium-2024/about-tuebingen/welcome-to-tuebingen/"
 ]
 
-TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen', 'wurmlingen', 'wolfenhausen', 'wilhelmshöhe', 'wendelsheim', 'weitenburg', 'weilheim', 'wankheim', 'waldhörnle', 'waldhausen', 'wachendorf', 'unterjesingen', 'talheim', 'sulzau', 'sülchen', 'streimberg', 'stockach', 'westliche steingart', 'steinenberg', 'seebronn', 'schwärzloch', 'schwalldorf', 'schönbuchspitz', 'naturpark schönbuch', 'schönberger kopf', 'schloßlesberg', 'schloßbuckel', 'schadenweilerhof', 'saurücken', 'rottenburg', 'rosenau', 'reusten', 'remmingsheim', 'rappenberg', 'poltringen', 'pfrondorf', 'pfäffingen', 'pfaffenberg', 'österberg', 'öschingen', 'ofterdinger berg', 'ofterdingen', 'odenburg', 'oberwörthaus', 'oberndorf', 'obernau', 'oberhausen', 'neuhaus', 'nellingsheim', 'nehren', 'mössingen', 'mähringen', 'lustnau', 'lausbühl', 'kusterdingen', 'kreuzberg', 'kreßbach', 'kirchkopf', 'kirchentellinsfurt', 'kilchberg', 'kiebingen', 'jettenburg', 'immenhausen', 'hornkopf', 'horn', 'hohenstöffel', 'schloss hohenentringen', 'hirschkopf', 'hirschau', 'hirrlingen', 'hinterweiler', 'heubergerhof', 'heuberg', 'hennental', 'hemmendorf', 'härtlesberg', 'hailfingen', 'hagelloch', 'günzberg', 'gomaringen', 'geißhalde', 'galgenberg', 'frommenhausen', 'firstberg', 'filsenberg', 'felldorf', 'farrenberg', 'bahnhof eyach', 'ergenzingen', 'erdmannsbach', 'ammerbuch', 'einsiedel', 'eichenfirst', 'eichenberg', 'ehingen', 'eckenweiler','dußlingen', 'dürrenberg', 'dickenberg', 'dettingen', 'dettenhausen', 'derendingen', 'denzenberg', 'buhlbachsaue','bromberg', 'breitenholz', 'börstingen', 'bodelshausen', 'bläsiberg', 'bläsibad', 'bierlingen', 'bieringen', 'belsen', 'bei der zeitungseiche', 'bebenhausen', 'baisingen', 'bad sebastiansweiler', 'bad niedernau', 'ammern', 'ammerbuch', 'altingen', 'alter berg', 'flugplatz poltringen ammerbuch', 'starzach', 'neustetten', 'hotel krone tubingen', 'hotel katharina garni', 'bodelshausen', 'dettenhausen', 'dußlingen', 'gomaringen', 'hirrlingen', 'kirchentellinsfurt', 'kusterdingen', 'nehren', 'ofterdingen', 'mössingen', 'rottenburg am neckar', 'tübingen, universitätsstadt', 'golfclub schloß weitenburg', 'siebenlinden', 'steinenbertturm', 'best western hotel convita', 'bebenhausen abbey', 'schloss bebenhausen', 'burgstall', 'rafnachberg', 'östliche steingart', 'kirnberg', 'burgstall', 'großer spitzberg', 'kleiner spitzberg', 'kapellenberg', 'tannenrain', 'grabhügel', 'hemmendörfer käpfle', 'kornberg', 'rotenberg', 'weilerburg', 'martinsberg', 'eckberg', 'entringen', 'ofterdingen, rathaus', 'randelrain', 'wahlhau', 'spundgraben', 'university library tübingen', 'tübingen hbf', 'bad niedernau', 'bieringen', 'kiebingen', 'unterjesingen mitte', 'unterjesingen sandäcker', 'entringen', 'ergenzingen', 'kirchentellinsfurt', 'mössingen', 'pfäffingen', 'rottenburg (neckar)', 'tübingen west', 'tübingen-lustnau', 'altingen (württ)', 'bad sebastiansweiler-belsen', 'dußlingen', 'bodelshausen', 'nehren', 'tübingen-derendingen', 'dettenhausen']
-
+TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen']
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0"
 MAX_RETRIES = 3
 TIMEOUT = 10
-CONCURRENCY = 10
+CONCURRENCY = 5  # Reduced concurrency for debugging
+MAX_CONTENT_SIZE = 10 * 1024 * 1024  # 10 MB
 
 def setup_database(api_url, drop_existing=False):
     conn = sqlite3.connect(api_url)
@@ -69,11 +73,16 @@ async def fetch(session, url):
     headers = {"User-Agent": USER_AGENT}
     for _ in range(MAX_RETRIES):
         try:
-            with async_timeout.timeout(TIMEOUT):
+            async with async_timeout.timeout(TIMEOUT):
                 async with session.get(url, headers=headers) as response:
-                    return await response.text(), url
+                    content = await response.read()
+                    logger.info(f"Fetched {url} with status {response.status} and size {len(content)} bytes")
+                    if len(content) > MAX_CONTENT_SIZE:
+                        logger.warning(f"Skipping {url} as it exceeds the maximum allowed size.")
+                        return None, url
+                    return content.decode('utf-8'), url
         except Exception as e:
-            print(f"Error fetching {url}: {e}")
+            logger.error(f"Error fetching {url}: {e}")
     return None, url
 
 def is_relevant(content):
@@ -100,6 +109,15 @@ def normalize_url(url):
     parsed_url = urlparse(url)
     return urlunparse(parsed_url._replace(fragment=''))
 
+def dont_crawl():
+    return [
+        '%wikipedia%',
+        '%wikimedia%',
+        '%.jpg%',
+        '%.png%',
+        '%.pdf%'
+    ]
+
 async def crawl(url, session, db_url):
     conn = sqlite3.connect(db_url)
     cursor = conn.cursor()
@@ -123,23 +141,18 @@ async def crawl(url, session, db_url):
                        (normalized_url, title, html, ','.join(links), timestamp))
         for link in links:
             cursor.execute("INSERT OR IGNORE INTO frontier (url) VALUES (?)", (normalize_url(link),))
-        print(f"Added {normalized_url} to documents.")
+        logger.info(f"Added {normalized_url} to documents.")
     cursor.execute("UPDATE frontier SET crawled = 1 WHERE url = ?", (normalized_url,))
     conn.commit()
     conn.close()
-
-async def run_sync():
-    while True:
-        await asyncio.sleep(1800)  # Wait for 30 minutes
-        print("Starting synchronization...")
-        await asyncio.to_thread(sync_database.synchronize)
-        print("Synchronization complete.")
 
 async def crawl_urls(session):
     while True:
         conn = sqlite3.connect(DATABASE_URL)
         cursor = conn.cursor()
-        cursor.execute("SELECT url FROM frontier WHERE crawled = 0 AND error = 0 LIMIT ?", (CONCURRENCY,))
+        exclude_conditions = " AND ".join([f"url NOT LIKE '{pattern}'" for pattern in dont_crawl()])
+        query = f"SELECT url FROM frontier WHERE crawled = 0 AND error = 0 AND {exclude_conditions} LIMIT ?"
+        cursor.execute(query, (CONCURRENCY,))
         urls_to_crawl = [row[0] for row in cursor.fetchall()]
         conn.close()
 
@@ -156,7 +169,7 @@ async def crawl_urls(session):
         cursor.execute("SELECT COUNT(*) FROM frontier")
         frontier_count = cursor.fetchone()[0]
         conn.close()
-        print(f"Documents: {documents_count}, Frontier: {frontier_count}")
+        logger.info(f"Documents: {documents_count}, Frontier: {frontier_count}")
 
 async def main():
     setup_database(DATABASE_URL)
@@ -168,10 +181,6 @@ async def main():
     conn.close()
 
     async with ClientSession() as session:
-        # Start the synchronization task
-        asyncio.create_task(run_sync())
-        
-        # Continue with the crawling process
         await crawl_urls(session)
 
 if __name__ == "__main__":
