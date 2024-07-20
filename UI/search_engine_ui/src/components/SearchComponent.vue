@@ -20,7 +20,6 @@
   </div>
 </template>
 
-
 <script>
 import axios from 'axios';
 import TreeComponent from './TreeComponent.vue';
@@ -56,6 +55,7 @@ export default {
   }
 };
 </script>
+
 <style scoped>
 .search-component {
   max-width: 600px;
@@ -64,28 +64,30 @@ export default {
 }
 
 .logo-box {
-  background-color: white;
+  background-color: #444444;
   padding: 20px;
   margin-bottom: 20px;
-  border-radius: 12px; /* Add rounded corners */
+  border-radius: 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .logo {
   width: 150px;
+  filter: invert(1);
 }
 
 .title-box {
-  background-color: white;
+  background-color: #444444;
   padding: 10px;
   margin: 0 auto 20px auto;
-  border-radius: 12px; /* Add rounded corners */
+  border-radius: 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  display: inline-block; /* Make the box only as big as the text */
+  display: inline-block;
 }
 
 .title-box h1 {
   margin: 0;
+  color: white;
 }
 
 .search-form {
@@ -93,6 +95,9 @@ export default {
   justify-content: center;
   align-items: center;
   margin-bottom: 20px;
+  background-color: #444444;
+  padding: 20px;
+  border-radius: 12px;
 }
 
 .search-input {
@@ -101,6 +106,12 @@ export default {
   margin-right: 10px;
   border: 1px solid #ccc;
   border-radius: 4px;
+  background-color: #444444;
+  color: white;
+}
+
+.search-input::placeholder {
+  color: #aaa;
 }
 
 .search-button,
@@ -110,33 +121,34 @@ export default {
   color: white;
   border-radius: 4px;
   cursor: pointer;
-  white-space: nowrap; /* Prevent text wrap */
+  white-space: nowrap;
 }
 
 .search-button {
-  background-color: #007bff;
+  background-color: #00008B; /* Darker blue */
 }
 
 .search-button:hover {
-  background-color: #0056b3;
+  background-color: #000066;
 }
 
 .tree-button {
-  background-color: #28a745;
+  background-color: #006400; /* Darker green */
   margin-left: 10px;
 }
 
 .tree-button:hover {
-  background-color: #218838;
+  background-color: #004d00;
 }
 
 .results {
   text-align: left;
   margin-top: 20px;
-  background-color: white; /* Set background to white */
-  padding: 20px; /* Add padding */
-  border-radius: 12px; /* Add rounded corners */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Add box shadow */
+  background-color: #444444;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  color: white;
 }
 
 .result-item {
@@ -145,7 +157,7 @@ export default {
 
 .result-link {
   text-decoration: none;
-  color: #007bff;
+  color: #66b3ff; /* Lighter blue for better contrast on dark background */
 }
 
 .result-link:hover {
