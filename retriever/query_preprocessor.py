@@ -4,14 +4,13 @@ import ast
 from langchain_community.llms import Ollama
 from langchain.output_parsers import CommaSeparatedListOutputParser
 from langchain_core.prompts import PromptTemplate
-import gensim.downloader as api
-
-"""
-Query Processing: Feature mit Summarizer wenn query zu lange.
-
-"""
 
 class QueryPreprocessor:
+    """
+    Query Processing with implemented query summarisation and Query Expansion.
+
+    Created by an LLM running locally with Ollama.
+    """
     def __init__(self, query_string: str, model="gemma2"):
         """
         Initializes the QueryPreprocessor with a query string.
@@ -70,11 +69,16 @@ class QueryPreprocessor:
     def generate_search_queries_gensim(self, top_n: int = 5) -> dict:
         """
         Finds similar keywords to those that appear in the query using word embeddings.
+
+        Currently not in use.
+
         Args:
             top_n (int): Number of similar keywords to return for each query word.
         Returns:
             dict: A dictionary with query words as keys and lists of similar keywords as values.
         """
+        import gensim.downloader as api
+
         self.word_vectors = api.load("glove-wiki-gigaword-100")  # Load pre-trained GloVe embeddings
         keywords = self.query_string.split()
         similar_keywords = {}
