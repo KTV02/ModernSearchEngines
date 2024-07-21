@@ -1,12 +1,19 @@
-# Frontend + Backend
+# ModernSearchEngines
+ModernSearchEngines contains the code to the final project to the course Modern Search Engines (INFO-4271) at the University of Tübingen. This project is a search engine that retrieves English related content about Tübingen.
 
-Steps to reproduce:
-- Go inside ./NLP/ and run the UIInterface class.
-- Go inside ./UI/search_engine_ui. Do npm install. Do npm run serve
+## Setup
 
-# Remote Database Guide
+### Dependencies
+The project is built using python for backend and NodeJS for frontend. The python dependencies are listed in `requirements.txt`.
 
-## Steps to Setup Meshnet
+### Installation
+Run:
+```
+git clone https://github.com/KTV02/ModernSearchEngines.git
+```
+
+### Remote Database Setup
+To get access to the index stored on our database, follow the steps below:
 
 1. Create a free NordVPN Account [here](https://nordvpn.com) (you don't even need the 30-day free trial, you just need the free account).
 2. [Download](https://nordvpn.com/download/) the app on the device you want to use (For Linux, there is also a CLI version).
@@ -17,40 +24,98 @@ Steps to reproduce:
 5. Enter email address: l.kremp@gmx.de
 6. Allow the first and last options (sending and receiving):
    ![Allow Options](readme/readme3.png)
-7. Send the invitation AND TELL ME! I need to accept this invitation.
+7. Send the invitation and notify l.kremp@gmx.de.
 8. Now you can see the IP address / hostname of the server under the tab "External Devices".
    ![IP_Adress](readme/readme4.png)
 
+## Usage
+To run the web interface of the search engine on localhost proceed as follows:
+1. Go inside ./NLP/ and run the UIInterface class. `cd ./NLP && python UIInterface.py`
+2. Go inside ./UI/search_engine_ui `cd ./UI/search_engine_ui`. Do `npm install`. Then `npm run serve`
+3. Enter search query (1) and hit "Search" (2)
+![UI Tooltip](readme/readme5.png)
 
-## Use the IP Address or Hostname to send requests to database
-Its best to use the hostname, because this will stay the same for every team member 
+## Folder Structure
 
-```python
-import requests
+```markdown
+ModernSearchEngines
+├── GeoIRLK
+│   └── distanceToTuebingenScorer.py
+├── NLP
+│   ├── KeywordFilter.py
+│   ├── NLPOutput.txt
+│   ├── NLPPipeline.py
+│   ├── UIInterface.py
+│   ├── final_results.csv
+│   └── topicmodelingoutput.txt
+├── README.md
+├── UI
+│   ├── READMEvue.txt
+│   ├── package-lock.json
+│   ├── search_engine_ui
+│   │   ├── README.md
+│   │   ├── babel.config.js
+│   │   ├── jsconfig.json
+│   │   ├── node_modules
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   ├── public
+│   │   │   ├── favicon.ico
+│   │   │   └── index.html
+│   │   ├── src
+│   │   │   ├── App.vue
+│   │   │   ├── assets
+│   │   │   │   ├── background.webp
+│   │   │   │   ├── logo.png
+│   │   │   │   └── logoUni.png
+│   │   │   ├── components
+│   │   │   │   ├── HomePage.vue
+│   │   │   │   ├── ImportPage.vue
+│   │   │   │   ├── LinkedBoxes.vue
+│   │   │   │   ├── Modal_component.vue
+│   │   │   │   ├── SearchComponent.vue
+│   │   │   │   ├── TreeComponent.vue
+│   │   │   │   └── TreeNodeComponent.vue
+│   │   │   ├── main.js
+│   │   │   └── router
+│   │   │       └── index.js
+│   │   └── vue.config.js
+│   └── topicTree.py
+├── pipeline.drawio
+├── readme
+│   ├── file_structure.md
+│   ├── readme1.png
+│   ├── readme2.png
+│   ├── readme3.png
+│   └── readme4.png
+├── retriever
+│   ├── bm25.py
+│   ├── bm25_cache.pkl
+│   ├── compute_features.py
+│   ├── data
+│   │   ├── X.csv
+│   │   ├── groups.csv
+│   │   └── y.csv
+│   ├── final_results.csv
+│   ├── lgb_ranker_model1.txt
+│   ├── output.txt
+│   ├── query_preprocessor.py
+│   ├── results
+│   ├── topicmodelling.py
+│   ├── vectorspace.py
+│   ├── vectorspaceintersection.py
+│   ├── xgb_ranker_model.json
+└── webcrawler
+    ├── NLPforKeywords_RAKE_NER.py
+    ├── NLPforKeywords_TOPIC_MODELLING.py
+    ├── crawler.py
+    ├── createDatabaseOverview.py
+    ├── localCrawler.py
+    ├── pagerank.py
+    ├── recheckKeyword.py
+    ├── sync_database.py
 
-# Here instead of hostname you can also use the ip adresse Displayed in NordVPN
-url = 'http://l.kremp-everest.nord:5000/query'
+```
 
-#always rename your parameters if you want to access them via their index in the output
-# e.g. here COUNT(*) renamed to count
-query = 'SELECT COUNT(*) AS count FROM documents'
-
-# Basic authentication details
-auth = ('mseproject', 'tuebingen2024')
-
-# Make the POST request to the Flask API with your query
-response = requests.post(url, json={'query': query}, auth=auth)
-
-# Check if the request was successful
-if response.status_code == 200:
-    # Parse the JSON response
-    data = response.json()
-    if data:
-        #here i can access the result via the index "count" because i renamed it ^
-        count = data[0]['count']
-        print(f"Total documents count: {count}")
-    else:
-        print("No data returned.")
-else:
-    print(f"Error executing query: {response.status_code} - {response.text}")
-
+## License
+[MIT](https://choosealicense.com/licenses/mit/)
