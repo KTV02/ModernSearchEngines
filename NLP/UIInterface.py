@@ -21,20 +21,33 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import json
 import topicTree as tree
+from urllib.parse import urlparse
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)
 
-# Declare the global variables at the top
 retriever = None
+
+# READ_INDEX: If true, then re-read index and do NLP processing.
 READ_INDEX = False
+# LOAD_FROM_DATABASE: If true, then query remote database. If false, then use the local index.json in cache.
 LOAD_FROM_DATABASE = False
+# NLP_OUTPUT_PATH: Where to save the model after keyword processing.
 NLP_OUTPUT_PATH = "NLPOutput.txt"
+
+# LOAD_BM25: If true, then use the cached BM25_PATH. If false, then create a new BM25 (both to memory).
 LOAD_BM25 = True
 BM25_PATH = "./retriever/bm25_cache.pkl"
-SAVE_MODEL = True
-OLLAMA_AVAILABLE = False
+# SAVE_MODEL_BM25: If true, then save the created bm25 to pickle to BM25_PATH.
+SAVE_MODEL_BM25 = True
+
+# OLLAMA_AVAILABLE: If true, then use ollama for query processing. If false no query processing is performed.
+OLLAMA_AVAILABLE = True
+
+# XGB_TOP_K: How many samples XGB Booster should return.
 XGB_TOP_K = 50
+# USE_XGB: Whether to use XGB or stick to BM25.
 USE_XGB = True
 titles = []
 urls = []
@@ -86,6 +99,77 @@ def get_links():
     return jsonify(links)
 
 
+def get_domain(url):
+    """Extract domain from URL."""
+    parsed_url = urlparse(url)
+    return parsed_url.netloc
+
+# scores - contents are only top 50 
+def check_and_adjust_results(documents, scores, titles, urls, contents, corpus, sorted_indices, top_indices, sorted_sums_values, k, global_urls, global_titles, threshold=0.7):
+    """Check domain threshold and adjust results by cutting and filling documents."""
+    # Step 1: Identify Domains
+    domain_count = defaultdict(int)
+    for url in urls:
+        domain = get_domain(url)
+        domain_count[domain] += 1
+
+    # Step 2: Check Threshold
+    total_documents = len(urls)
+    max_domain, max_count = max(domain_count.items(), key=lambda item: item[1])
+    domain_percentage = max_count / total_documents
+    print(f"Domain Percentage: {domain_percentage}")
+
+    if domain_percentage >= threshold:
+        print(max_domain)
+        dominant_domain = max_domain
+        # Identify documents from the dominant domain
+        dominant_domain_indices = [i for i, url in enumerate(urls) if get_domain(url) == max_domain]
+        print("This is how many documents there are from this website")
+        print(len(dominant_domain_indices))
+        
+        # Sort the dominant domain indices by their scores
+        dominant_domain_indices_sorted = sorted(dominant_domain_indices, key=lambda i: scores[i])
+        print(len(dominant_domain_indices_sorted))
+        
+        # Calculate the number of documents to remove
+        num_to_cut = len(dominant_domain_indices_sorted) // 2
+        print(num_to_cut)
+        
+        # Remove the lowest 50% scores from the dominant domain
+        indices_to_remove = dominant_domain_indices_sorted[:num_to_cut]
+        print(indices_to_remove)
+        
+        # Create a set for quick lookup of indices to remove
+        indices_to_remove_set = set(indices_to_remove)
+        print(indices_to_remove_set)
+        
+        # Retain the top indices excluding the ones to be removed
+        retained_indices = [i for i in top_indices if i not in indices_to_remove_set]
+        print("Retained:")
+        print(len(retained_indices))
+        
+        # Ensure we still have k items by adding more from the sorted_indices
+        additional_needed = k - len(retained_indices)
+        additional_indices = [
+            i for i in sorted_indices 
+            if i not in retained_indices and get_domain(global_urls[i]) != dominant_domain
+        ]
+        retained_indices += additional_indices[:additional_needed]
+        documents= []
+        relevantTitlesBM25 = []
+        relevantUrlsBM25 = []
+        relevantContentBM25 = []
+        for index in retained_indices:
+            documents.append({"body": " ".join(corpus[index]), "title": global_titles[index], "url": global_urls[index]})
+            relevantTitlesBM25.append(global_titles[index])
+            relevantUrlsBM25.append(global_urls[index])
+            relevantContentBM25.append(corpus[index])
+
+        return documents, relevantContentBM25, relevantTitlesBM25, relevantUrlsBM25
+
+    return documents, contents, titles, urls
+
+
 def retrieval(query, k=100):
     """retrieves k documents for query with BM25 and reranks the results with XGBoost,
     returning XGB_TOP_K results for topic modeling.
@@ -109,36 +193,48 @@ def retrieval(query, k=100):
     # Query the corpus and get top-k results
     print("Retrieving results...")
     start_bm25 = time.time()
-    x, y = retriever.retrieve(tok_query, k=k, sorted=True)
+    x_scores, y_indices = retriever.retrieve(tok_query, k=k, sorted=True)
     bm25_time = time.time() - start_bm25
-    sum_dict = {i: 0 for i in range(len(corpus))}
+    sum_dict = {i: 0 for i in range(len(corpus))} # Sum the scores of multiple queries here up
 
-    # Iterate over the score and index arrays to calculate sums
-    for i in range(x.shape[0]):
-        for j in range(x.shape[1]):
-            index = y[i, j]
-            sum_dict[index] += x[i, j]  # get the score from x at the exact position
+    # Iterate over the score and index arrays to calculate sums (for multiple queries)
+    for i in range(x_scores.shape[0]):
+        for j in range(x_scores.shape[1]):
+            index = y_indices[i, j]
+            sum_dict[index] += x_scores[i, j]  # get the score from x at the exact position
 
-    sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True)
-    sorted_indices = [item[0] for item in sorted_sums]
-    sorted_sums_values = [item[1] for item in sorted_sums]
-    top_n = min(k, len(sorted_indices))
-    # get the top index from the overall map
-    top_indices = sorted_indices[:top_n]
+    sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True) # sort to have the highest scores [1] up
+    sorted_indices = [item[0] for item in sorted_sums] # get the indices (OF THE INDEX) in a list
+    sorted_sums_values = [item[1] for item in sorted_sums] # get the values in a list
+    top_n = min(k, len(sorted_indices)) # now decide if data is less or more than k = 100 
+    top_indices = sorted_indices[:top_n] # cut out the other parts. Here we could get new data prior from.
+
+    # For further processing in XGBoost we need these values from the BM25 output:
     documents = []
     relevantTitlesBM25 = []
     relevantUrlsBM25 = []
     relevantContentBM25 = []
+    scores = []
     for index in top_indices:
         documents.append({"body": " ".join(corpus[index]), "title": titles[index], "url": urls[index]})
         relevantTitlesBM25.append(titles[index])
         relevantUrlsBM25.append(urls[index])
         relevantContentBM25.append(corpus[index])
+        scores.append(sum_dict[index])  # Add the corresponding score
+
+    #print(relevantUrlsBM25[:15])
+
+    #documents, relevantContentBM25, relevantTitlesBM25, relevantUrlsBM25 = check_and_adjust_results(
+    #    documents, scores, relevantTitlesBM25, relevantUrlsBM25, relevantContentBM25, corpus, sorted_indices, top_indices=top_indices, sorted_sums_values=sorted_sums_values, k=k, global_urls=urls, global_titles=titles
+    #)
+    #print("Adjusted results:")
+    #print(relevantUrlsBM25[:15])
+
     if USE_XGB:
         start_xgb = time.time()
         extracted_features = extract_features(documents, query)
         ranker = xgb.XGBRanker()
-        ranker.load_model('../retriever/xgb_ranker_model.json')
+        ranker.load_model('../retriever/xgb_ranker_model_version2.json')
         y_pred = ranker.predict(extracted_features)
         XGB_top_indices = np.argsort(y_pred)[-XGB_TOP_K:][::-1]
         y_pred.sort()
@@ -181,13 +277,14 @@ def ollamaProcess(query):
     to achieve better results with BM25 and XGBoost.
     :param query: query to be ranked
     :return: tokenized queries based on the user query with ollama language model+"""
+    #query = query + " in Tübingen"
     tok_query = []
     if OLLAMA_AVAILABLE:
         print("Generating queries using LLM...")
         q_preprocessor = QueryPreprocessor(query)
-        five_queries = q_preprocessor.generate_search_queries_ollama()
-        six_queries = five_queries + [query]
-        tok_query = [tokenize(i) for i in six_queries]
+        eight_queries = q_preprocessor.generate_search_queries_ollama()
+        nine_queries = eight_queries + [query]
+        tok_query = [tokenize(i) for i in nine_queries]
         print(tok_query)
     else:
         print("Not using Query processing.")
@@ -241,7 +338,7 @@ def initialize_retriever():
     else:
         print("Creating BM25 model...")
         retriever = OurBM25(corpus, num_threads=cpu_count())
-        if SAVE_MODEL:
+        if SAVE_MODEL_BM25:
             os.makedirs(os.path.dirname(BM25_PATH), exist_ok=True)
             retriever.save_to_pkl(BM25_PATH)
             print("BM25 model saved to cache.")
@@ -294,7 +391,7 @@ def query_db(columns: list, limit: int=None, auth=('mseproject', 'tuebingen2024'
 
 def extract_features(group_docs, query):
     """extracts features for the XGBoost model"""
-    pdf = PrecomputedDocumentFeatures(group_docs)
+    pdf = PrecomputedDocumentFeatures(group_docs, embedding_model=embedding_model)
     group_features = pdf.extract_query_features(query)
     normalized_features = pdf.normalize_features(group_features)
     return normalized_features
