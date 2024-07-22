@@ -21,13 +21,14 @@ class PrecomputedDocumentFeatures:
     Precompute Features for XGBoost
     """
     
-    def __init__(self, documents: List[dict]):
+    def __init__(self, documents: List[dict], embedding_model):
         self.documents = documents
         self.doc_count = len(documents)
         self.idf_cache_body, self.idf_max_body = self.IDF(part="body")
         self.idf_cache_title, self.idf_max_title = self.IDF(part="title")
         self.idf_cache_url, self.idf_max_url = self.IDF(part="url")
         self.precomputed_docs = []
+        self.model = embedding_model
         self._precompute_features()
     
     def IDF(self, part) -> Dict[str, float]:
@@ -91,6 +92,11 @@ class PrecomputedDocumentFeatures:
             body_tfidf = self.compute_tfidf(body_term_freq, part="body")
             title_tfidf = self.compute_tfidf(title_term_freq, part="title")
             url_tfidf = self.compute_tfidf(url_term_freq, part="url")
+            
+            # Compute sentence embeddings
+            body_embedding = self.model.encode(body)
+            title_embedding = self.model.encode(title)
+            url_embedding = self.model.encode(url)
 
             # For each document: precomputed features
             self.precomputed_docs.append({
@@ -100,6 +106,9 @@ class PrecomputedDocumentFeatures:
                 'body_tfidf': body_tfidf,
                 'title_tfidf': title_tfidf,
                 'url_tfidf': url_tfidf,
+                'body_embedding': body_embedding,
+                'title_embedding': title_embedding,
+                'url_embedding': url_embedding,
                 'num_slashes_url': url.count('/'),
                 'num_char_url': len(url)
             })
@@ -120,7 +129,6 @@ class PrecomputedDocumentFeatures:
     
     def get_synonyms(self, term):
         """ Get synonyms from Wordnet."""
-        #nltk.download('wordnet')
         synonyms = set()
         for syn in wordnet.synsets(term):
             for lemma in syn.lemmas():
@@ -147,6 +155,7 @@ class PrecomputedDocumentFeatures:
         query_tfidf_body = self.compute_tfidf(query_term_freq, part="body")
         query_tfidf_title = self.compute_tfidf(query_term_freq, part="title")
         query_tfidf_url = self.compute_tfidf(query_term_freq, part="url")
+        query_embedding = self.model.encode(query)
         
         all_features = []
 
@@ -192,6 +201,12 @@ class PrecomputedDocumentFeatures:
                 feature_values.append(cosine_sim)
                 if debug:
                     feature_dict[f'{part}_cosine_similarity'] = cosine_sim
+                
+                # Cosine similarity between embeddings
+                embedding_similarity = np.dot(query_embedding, doc_features[f'{part}_embedding']) / (np.linalg.norm(query_embedding) * np.linalg.norm(doc_features[f'{part}_embedding']))
+                feature_values.append(embedding_similarity)
+                if debug:
+                    feature_dict[f'{part}_embedding_similarity'] = embedding_similarity
             
             # Add additional document-level features
             feature_values.extend([
@@ -218,11 +233,12 @@ class PrecomputedDocumentFeatures:
         max_vals = features.max(axis=0)
         return ((features - min_vals) / (max_vals - min_vals)).tolist()
 
+# Example usage
+# documents = [{'body': 'example body text', 'title': 'example title', 'url': 'https://www.example.com'}]
+# pdf = PrecomputedDocumentFeatures(documents)
+# query = "example query"
+# features = pdf.extract_query_features(query, debug=False)
+# normalized_features = pdf.normalize_features(features)
 
-#pdf = PrecomputedDocumentFeatures(documents)
-#query = "example body2"
-#features = pdf.extract_query_features(query, debug=False)
-#normalized_features = pdf.normalize_features(features)
-
-#print(features)
-#print(normalized_features)
+# print(features)
+# print(normalized_features)

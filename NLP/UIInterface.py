@@ -17,6 +17,7 @@ from compute_features import tokenize, PrecomputedDocumentFeatures
 import KeywordFilter as kwf
 from NLPPipeline import NLP_Pipeline
 import topicmodelling as tm
+from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import json
 import topicTree as tree
@@ -26,7 +27,8 @@ CORS(app)
 
 # Declare the global variables at the top
 retriever = None
-READ_INDEX = True
+READ_INDEX = False
+LOAD_FROM_DATABASE = False
 NLP_OUTPUT_PATH = "NLPOutput.txt"
 LOAD_BM25 = True
 BM25_PATH = "./retriever/bm25_cache.pkl"
@@ -192,6 +194,19 @@ def ollamaProcess(query):
         tok_query = [tokenize(query)]
     return tok_query
 
+def load_data_from_file(file_path: str) -> list[tuple]:
+    """Loads JSON data (typically if you have an index.json) then returns it as a list of tuples"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+    except FileNotFoundError:
+        print(f"File {file_path} not found.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from the file {file_path}.")
+        return None
+
 def initialize_retriever():
     """initializes the BM25 ranker either by computing the weights or loading them from cache
     uses the NLP processed documents or calls the NLPPipeline to process documents directly from the index"""
@@ -199,17 +214,22 @@ def initialize_retriever():
     global corpus
     global titles
     global urls
+    global embedding_model 
     if READ_INDEX:
-        print("Reading index from database...")
-        try:
-            data = query_db(columns=["url", "title", "content"])
-            if data is None:
-                raise ValueError("No data returned from the database.")
-        except Exception as e:
-            print(f"Error initializing retriever: {e}")
-            return
+        if LOAD_FROM_DATABASE:
+            print("Reading index from database...")
+            try:
+                data = query_db(columns=["url", "title", "content"])
+                if data is None:
+                    raise ValueError("No data returned from the database.")
+            except Exception as e:
+                print(f"Error initializing retriever: {e}")
+                return
+        else: 
+            print("Loading index from local checkpoint.... Else: LOAD_FROM_DATABASE=True")
+            data = load_data_from_file("index.json")
         print("...and running NLP pipeline...")
-        nlp_pipeline = NLP_Pipeline(data, output_file_path=NLP_OUTPUT_PATH)
+        nlp_pipeline = NLP_Pipeline(data=data, output_file_path=NLP_OUTPUT_PATH)
         nlp_pipeline.process_documents()
         print("NLP pipeline completed.")
     corpus, titles, urls = kwf.parse_tokens(NLP_OUTPUT_PATH)
@@ -226,6 +246,7 @@ def initialize_retriever():
             retriever.save_to_pkl(BM25_PATH)
             print("BM25 model saved to cache.")
         print("BM25 model created.")
+    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L12-v2')
 
 
 def query_db(columns: list, limit: int=None, auth=('mseproject', 'tuebingen2024'), url='http://l.kremp-everest.nord:5000/query') -> list[tuple]:

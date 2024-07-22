@@ -38,11 +38,13 @@ def hamming_distance(hash1, hash2):
     return np.sum(np.array(list(hash1)) != np.array(list(hash2)))
 
 class NLP_Pipeline:
-    def __init__(self, output_file_path='NLPOutput.txt', limit=None):
+    def __init__(self, output_file_path='NLPOutput.txt', data=None, limit=None):
         self.output_file_path = output_file_path
         self.limit = limit
         self.initialize_file(self.output_file_path)
-        self.data = self.fetch_db()
+        self.data = data
+        if data == None:
+            self.data = self.fetch_db()
 
     def initialize_file(self, file_path):
         with open(file_path, 'w') as file:
