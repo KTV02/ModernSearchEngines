@@ -26,7 +26,7 @@ class QueryPreprocessor:
         """
         llm = Ollama(model=self.model)  # assuming you have Ollama installed and have gemma2 model pulled
 
-        if len(query_string) >= 50 and not self.is_summarized:
+        if len(self.query_string) >= 50 and not self.is_summarized:
             # summarize 
             prompt = PromptTemplate(
                     template="Summarize this search query: {query}. Directly return this without explanation.",
@@ -45,7 +45,7 @@ class QueryPreprocessor:
                 output_parser = CommaSeparatedListOutputParser()
                 format_instructions = output_parser.get_format_instructions()
                 prompt = PromptTemplate(
-                    template="Rephrase this search engines query 5 times, without changing the meaning: {query}. Queries must be city of Tübingen related.\n{format_instructions}",
+                    template="Rephrase this search engines query 8 times, without changing the meaning: {query}. Queries must be city of Tübingen related.\n{format_instructions}",
                     input_variables=["query"],
                     partial_variables={"format_instructions": format_instructions},
                 )

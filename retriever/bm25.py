@@ -40,10 +40,14 @@ class OurBM25:
         self.k1 = k1
         self.b = b
         self.num_threads = num_threads
-        self.corpus = list(self.parse_documents(filepath, "Tokens"))
-        if not self.corpus or not isinstance(self.corpus[0], list):
-            raise ValueError("Corpus is empty or not tokenized properly.")
+        if isinstance(filepath, list):
+            self.corpus = filepath
+        else:
+            self.corpus = list(self.parse_documents(filepath, "Tokens"))
+            if not self.corpus or not isinstance(self.corpus[0], list):
+                raise ValueError("Corpus is empty or not tokenized properly.")
         self.N = len(self.corpus)
+        print(self.N)
         self._initialize()
 
     def _initialize(self):
@@ -286,7 +290,7 @@ if __name__ == "__main__":
         "frequencies", "and", "term", "frequencies", "are", "calculated", "properly"
         ]
     ]
-    bm25 = OurBM25(corpus, num_threads=4)
+    bm25 = OurBM25(filepath=corpus, num_threads=4)
     query = [["hello", "term"]]
     x, y = bm25.retrieve(query_tokens=query, k=5, sorted=True)
     print(x)
