@@ -1,5 +1,11 @@
-#Performs topic modelling on the final output of the ranker 
-#Ouput of this is used in UI as final rank and for Topic modeling graph
+# Performs topic modelling on the final output of the ranker 
+# Output of this is used in UI as final rank and for Topic modeling graph
+
+# Diversification is given by this formula:
+# Combined Score=α×Relevance Score+(1−α)×Diversity Score
+
+# 70% of score based on ranker score and 30 % based on diversity score
+diversification_alpha = 0.7
 
 import pandas as pd
 import ast
@@ -48,8 +54,8 @@ def parse_results(file_path):
     return results
 
 # Function to perform all calculations and store results
-#This performs the topic modeling and stores the results
-def perform_calculations(file_path):
+# This performs the topic modeling and stores the results
+def perform_calculations(file_path, num_results=100, alpha=diversification_alpha):
     try:
         # Parse the results
         results = parse_results(file_path)
@@ -73,20 +79,26 @@ def perform_calculations(file_path):
         for i in range(5):
             df[f'topic_{i}'] = topic_distributions[:, i]
 
-        # Get the top 5 results by accuracy
-        global top_5_results
-        top_5_results = df.nlargest(5, 'accuracy')
+        # Calculate diversity score (1 / (number of documents in topic + 1))
+        df['diversity_score'] = df.apply(lambda row: sum([row[f'topic_{i}'] / (df[f'topic_{i}'].sum() + 1) for i in range(5)]), axis=1)
+        
+        # Calculate combined score
+        df['combined_score'] = alpha * df['accuracy'] + (1 - alpha) * df['diversity_score']
 
-        # Function to get the best result for a topic not in top 5
+        # Get the top results by combined score
+        global top_results
+        top_results = df.nlargest(num_results, 'combined_score')
+
+        # Function to get the best result for a topic not in top results
         def get_best_for_topic(topic_num, selected_urls):
             topic_col = f'topic_{topic_num}'
-            filtered_df = df[~df.index.isin(top_5_results.index)]
+            filtered_df = df[~df.index.isin(top_results.index)]
             filtered_df = filtered_df[~filtered_df['url'].isin(selected_urls)]
-            best_result = filtered_df.nlargest(1, 'accuracy')
+            best_result = filtered_df.nlargest(1, 'combined_score')
             return best_result
 
         # Collect the best result for each topic
-        selected_urls = set(top_5_results['url'])
+        selected_urls = set(top_results['url'])
         best_by_topic = []
         for topic_num in range(5):
             best_result = get_best_for_topic(topic_num, selected_urls)
@@ -100,7 +112,7 @@ def perform_calculations(file_path):
 
         # Display the results
         global final_results
-        final_results = pd.concat([top_5_results, best_by_topic_df]).reset_index(drop=True)
+        final_results = pd.concat([top_results, best_by_topic_df]).reset_index(drop=True)
         final_results.to_csv('final_results.csv', index=False)
         
         return True
@@ -130,9 +142,10 @@ def get_topic_arrays():
 
     return topic_arrays
 
-#Example usage: Output of ranker in this case would be topicmodelingoutput.txt
+# Example usage: Output of ranker in this case would be topicmodelingoutput.txt
 file_path = '../NLP/topicmodelingoutput.txt'
-if perform_calculations(file_path):
+num_results = 100 # Change this to the number of search results you want
+if perform_calculations(file_path, num_results):
     search_results = get_search_results()
     print("Search Results:")
     print(search_results)
