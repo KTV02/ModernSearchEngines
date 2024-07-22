@@ -122,12 +122,25 @@ def pagerank_statistics(db_name):
 
 def run_pagerank(db_path):
     ensure_pagerank_column(db_path)
-    web_graph = get_web_graph(db_path)
-    pagerank = compute_pagerank(web_graph)
-    save_pagerank(db_path, pagerank)
-    print("PageRank values have been computed and stored in the database.")
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Check if any pagerank values are NULL
+    cursor.execute("SELECT COUNT(*) FROM documents WHERE pagerank IS NULL")
+    null_count = cursor.fetchone()[0]
+    
+    if null_count == 0:
+        print("All documents already have PageRank values. Skipping computation.")
+    else:
+        web_graph = get_web_graph(db_path)
+        pagerank = compute_pagerank(web_graph)
+        save_pagerank(db_path, pagerank)
+        print("PageRank values have been computed and stored in the database.")
+    
+    conn.close()
 
-def get_pagerank(urls):
+def get_pagerank(db_path, urls):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT url, pagerank FROM documents WHERE url IN ({seq})".format(
@@ -141,7 +154,8 @@ run_pagerank(db_path)
 pagerank_statistics(db_path)
 
 # Example usage of get_pagerank
-urls_to_check = ['http://example.com/page1', 'http://example.com/page2']
-pagerank_scores = get_pagerank(urls_to_check)
+urls_to_check = ['http://cyber-valley.de/en']
+pagerank_scores = get_pagerank(db_path, urls_to_check)
 print("PageRank scores for specified URLs:")
 print(pagerank_scores)
+
