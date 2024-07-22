@@ -62,7 +62,7 @@ def compute_pagerank(web_graph, damping_factor=0.85, max_iterations=100, tol=1.0
     
     return {url: pagerank[idx] for url, idx in zip(urls, range(N))}
 
-def save_pagerank(db_path, pagerank):
+def ensure_pagerank_column(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     try:
@@ -70,7 +70,12 @@ def save_pagerank(db_path, pagerank):
     except sqlite3.OperationalError:
         # Column already exists
         pass
+    conn.commit()
+    conn.close()
 
+def save_pagerank(db_path, pagerank):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
     for url, rank in pagerank.items():
         cursor.execute("UPDATE documents SET pagerank = ? WHERE url = ?", (rank, url))
     conn.commit()
@@ -116,6 +121,7 @@ def pagerank_statistics(db_name):
     conn.close()
 
 def run_pagerank(db_path):
+    ensure_pagerank_column(db_path)
     web_graph = get_web_graph(db_path)
     pagerank = compute_pagerank(web_graph)
     save_pagerank(db_path, pagerank)

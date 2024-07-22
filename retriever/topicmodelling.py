@@ -1,4 +1,5 @@
-# Performs topic modelling on the final output of the ranker 
+# -*- coding: utf-8 -*-
+# Performs topic modeling on the final output of the ranker 
 # Output of this is used in UI as final rank and for Topic modeling graph
 
 # Diversification is given by this formula:
@@ -25,7 +26,7 @@ def flatten_list(nested_list):
 # Function to parse output of the ranker and return a list of tuples(index,title,url,content,score)
 def parse_results(file_path):
     results = []
-    with open(file_path, 'r', encoding='utf-8') as file:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
         for line in file:
             line = line.strip()
             if line:
@@ -46,7 +47,11 @@ def parse_results(file_path):
                 index = int(prefix_parts[0].strip('['))
                 title = prefix_parts[1].strip("'")
                 url = prefix_parts[2].strip("'")
-                content_list = ast.literal_eval(prefix_parts[3])
+                try:
+                    content_list = ast.literal_eval(prefix_parts[3])
+                except SyntaxError as e:
+                    print(f"Syntax error when parsing content: {e}")
+                    continue
                 flat_content_list = flatten_list(content_list)  # Flatten nested lists
                 content = ' '.join(flat_content_list)  # Combine content parts
                 accuracy = float(accuracy_part)
@@ -56,9 +61,13 @@ def parse_results(file_path):
 # Function to perform all calculations and store results
 # This performs the topic modeling and stores the results
 def perform_calculations(file_path, num_results=100, alpha=diversification_alpha):
+    global final_results
     try:
         # Parse the results
         results = parse_results(file_path)
+        if not results:
+            print("No results were parsed.")
+            return False
 
         # Convert to DataFrame
         global df
@@ -66,14 +75,26 @@ def perform_calculations(file_path, num_results=100, alpha=diversification_alpha
 
         # Vectorize the content for LDA
         vectorizer = TfidfVectorizer(stop_words='english')
-        X = vectorizer.fit_transform(df['content'])
+        try:
+            X = vectorizer.fit_transform(df['content'])
+        except ValueError as e:
+            print(f"Value error during vectorization: {e}")
+            return False
 
         # Perform LDA
         lda = LatentDirichletAllocation(n_components=5, random_state=42)
-        lda.fit(X)
+        try:
+            lda.fit(X)
+        except ValueError as e:
+            print(f"Value error during LDA fitting: {e}")
+            return False
 
         # Get topic distributions for each document
-        topic_distributions = lda.transform(X)
+        try:
+            topic_distributions = lda.transform(X)
+        except ValueError as e:
+            print(f"Value error during LDA transformation: {e}")
+            return False
 
         # Add topic distributions to DataFrame
         for i in range(5):
@@ -94,6 +115,8 @@ def perform_calculations(file_path, num_results=100, alpha=diversification_alpha
             topic_col = f'topic_{topic_num}'
             filtered_df = df[~df.index.isin(top_results.index)]
             filtered_df = filtered_df[~filtered_df['url'].isin(selected_urls)]
+            if filtered_df.empty:
+                return pd.DataFrame()
             best_result = filtered_df.nlargest(1, 'combined_score')
             return best_result
 
@@ -108,11 +131,13 @@ def perform_calculations(file_path, num_results=100, alpha=diversification_alpha
 
         # Concatenate results into a single DataFrame
         global best_by_topic_df
-        best_by_topic_df = pd.concat(best_by_topic)
-
-        # Display the results
-        global final_results
-        final_results = pd.concat([top_results, best_by_topic_df]).reset_index(drop=True)
+        if best_by_topic:
+            best_by_topic_df = pd.concat(best_by_topic)
+            final_results = pd.concat([top_results, best_by_topic_df]).reset_index(drop=True)
+        else:
+            final_results = top_results.reset_index(drop=True)
+        
+        # Save the final results to a CSV file
         final_results.to_csv('final_results.csv', index=False)
         
         return True
@@ -143,7 +168,7 @@ def get_topic_arrays():
     return topic_arrays
 
 # Example usage: Output of ranker in this case would be topicmodelingoutput.txt
-file_path = '../NLP/topicmodelingoutput.txt'
+file_path = 'topicmodelingoutput.txt'
 num_results = 100 # Change this to the number of search results you want
 if perform_calculations(file_path, num_results):
     search_results = get_search_results()
