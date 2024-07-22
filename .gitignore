@@ -178,3 +178,4 @@ webcrawler/website.txt
 webcrawler/sync_status.json
 webcrawler/crawler.db
 NLP/NLPOutput.txt
+retriever/index.db
