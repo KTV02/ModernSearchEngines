@@ -37,8 +37,11 @@ urls = []
 corpus = []
 topicArray = []
 
+
 @app.route('/rank_batch', methods=['POST'])
 def rank_batch():
+    """retrieves documents for a batch file of queries
+        passed via the import function of the UI"""
     file = request.files['file']
     lines = file.read().decode('utf-8').splitlines()
     results = []
@@ -53,22 +56,19 @@ def rank_batch():
     output.seek(0)
     return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/plain', as_attachment=True, download_name='processed_file.txt')
 
+
 @app.route('/rank', methods=['POST'])
 def rank():
+    """retrieves documents for the query passen by the user via the UI"""
     data = request.json
     query = data.get('query')
     relevantTitles, relevantUrls, _ = retrieval(query)
     return jsonify({'relevantTitles': relevantTitles, 'relevantUrls': relevantUrls})
 
-@app.route('/get_tree', methods=['GET'])
-def makeTree():
-    print("hello")
-    dtree = tree.get_tree()
-    print(dtree)
-    return dtree
 
 @app.route('/get_links', methods=['GET'])
 def get_links():
+    """passes links of grouped in 5 different topics for display purposes in the UI"""
     if topicArray:
         links = [
             {"name": "Topic 1", "urls": [{"title": topicArray[0][0][0], "url": topicArray[0][0][1]}, {"title": topicArray[0][1][0], "url": topicArray[0][1][1]}, {"title": topicArray[0][2][0], "url": topicArray[0][2][1]}, {"title": topicArray[0][3][0], "url": topicArray[0][3][1]}, {"title": topicArray[0][4][0], "url": topicArray[0][4][1]}], "color": "#f8d7da"},
@@ -81,7 +81,14 @@ def get_links():
         links = [{"name": "INFO", "urls": [{"title": "please run a query first", "url": None}], "color": "#f8d7da"}]
     return jsonify(links)
 
+
 def retrieval(query, k=100):
+    """retrieves k documents for query with BM25 and reranks the results with XGBoost,
+    returning XGB_TOP_K results for topic modeling.
+    Topic modeling results get included in the top results for the user to guarantee diversity
+    :param query: query to be ranked
+    :param k: number of documents to be pre-ranked by BM25
+    """
     global retriever
     global corpus
     global titles
@@ -115,7 +122,6 @@ def retrieval(query, k=100):
     # get the top index from the overall map
     top_indices = sorted_indices[:top_n]
     documents = []
-    #HACK: titles and urls separately for testing
     relevantTitlesBM25 = []
     relevantUrlsBM25 = []
     relevantContentBM25 = []
@@ -147,6 +153,7 @@ def retrieval(query, k=100):
         for i in range(XGB_TOP_K):
             topicModelingOutput.append([i, relevantTitles[i], relevantUrls[i], relevantContent[i], y_pred[i]])
         try:
+            #write results of XGBoost in file to be processed by topic modeling
             with open("topicmodelingoutput.txt", 'w') as file:
                 file.write("")
             with open("topicmodelingoutput.txt", 'a', encoding='utf-8', errors='replace') as file:
@@ -166,6 +173,10 @@ def retrieval(query, k=100):
         return relevantTitlesBM25, relevantUrlsBM25
 
 def ollamaProcess(query):
+    """Generates similar queries based on the user query with ollama language model if it's available
+    to achieve better results with BM25 and XGBoost.
+    :param query: query to be ranked
+    :return: tokenized queries based on the user query with ollama language model+"""
     tok_query = []
     if OLLAMA_AVAILABLE:
         print("Generating queries using LLM...")
@@ -180,6 +191,8 @@ def ollamaProcess(query):
     return tok_query
 
 def initialize_retriever():
+    """initializes the BM25 ranker either by computing the weights or loading them from cache
+    uses the NLP processed documents or calls the NLPPipeline to process documents directly from the index"""
     global retriever
     global corpus
     global titles
@@ -212,7 +225,9 @@ def initialize_retriever():
             print("BM25 model saved to cache.")
         print("BM25 model created.")
 
+
 def query_db(columns: list, limit: int=None, auth=('mseproject', 'tuebingen2024'), url='http://l.kremp-everest.nord:5000/query') -> list[tuple]:
+    """is able to query the Database directly if there is no output from the actual NLPPipeline directly availiable"""
     columns_str = ', '.join(columns)
     query = f'SELECT {columns_str} FROM documents'
     if limit is not None:
@@ -230,7 +245,9 @@ def query_db(columns: list, limit: int=None, auth=('mseproject', 'tuebingen2024'
         print(f"Error executing query: {e}")
         return None
 
+
 def extract_features(group_docs, query):
+    """extracts features for the XGBoost model"""
     pdf = PrecomputedDocumentFeatures(group_docs)
     group_features = pdf.extract_query_features(query)
     normalized_features = pdf.normalize_features(group_features)
