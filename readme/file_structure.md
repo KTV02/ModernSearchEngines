@@ -1,43 +1,3 @@
-# ModernSearchEngines
-ModernSearchEngines contains the code to the final project to the course Modern Search Engines (INFO-4271) at the University of Tübingen. This project is a search engine that retrieves English related content about Tübingen.
-
-## Setup
-
-### Dependencies
-The project is built using python for backend and NodeJS for frontend. The python dependencies are listed in `requirements.txt`.
-
-### Installation
-Run:
-```
-git clone https://github.com/KTV02/ModernSearchEngines.git
-```
-
-### Remote Database Setup
-To get access to the index stored on our database, follow the steps below:
-
-1. Create a free NordVPN Account [here](https://nordvpn.com) (you don't even need the 30-day free trial, you just need the free account).
-2. [Download](https://nordvpn.com/download/) the app on the device you want to use (For Linux, there is also a CLI version).
-3. Enable Meshnet:
-   ![Enable Meshnet](readme/readme1.png)
-4. Click on External Device > Link External Device:
-   ![Link External Device](readme/readme2.png)
-5. Enter email address: l.kremp@gmx.de
-6. Allow the first and last options (sending and receiving):
-   ![Allow Options](readme/readme3.png)
-7. Send the invitation and notify l.kremp@gmx.de.
-8. Now you can see the IP address / hostname of the server under the tab "External Devices".
-   ![IP_Adress](readme/readme4.png)
-
-## Usage
-To run the web interface of the search engine on localhost proceed as follows:
-1. Go inside ./NLP/ and run the UIInterface class. `cd ./NLP && python UIInterface.py`
-2. Go inside ./UI/search_engine_ui `cd ./UI/search_engine_ui`. Do `npm install`. Then `npm run serve`
-3. Enter search query (1) and hit "Search" (2)
-![UI Tooltip](readme/readme5.png)
-
-## Folder Structure
-
-```markdown
 ModernSearchEngines
 ├── GeoIRLK
 │   └── distanceToTuebingenScorer.py
@@ -114,8 +74,3 @@ ModernSearchEngines
     ├── pagerank.py
     ├── recheckKeyword.py
     ├── sync_database.py
-
-```
-
-## License
-[MIT](https://choosealicense.com/licenses/mit/)

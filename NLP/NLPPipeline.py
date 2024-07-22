@@ -8,6 +8,7 @@ from nltk.stem import WordNetLemmatizer
 from bs4 import BeautifulSoup
 from readability import Document
 from tqdm import tqdm
+from collections import Counter, defaultdict, OrderedDict
 
 # utility functions for soft deduplication
 def compute_simhash(words, num_bits=64):
@@ -36,10 +37,10 @@ def compute_tf_idf(documents):
 def hamming_distance(hash1, hash2):
     return np.sum(np.array(list(hash1)) != np.array(list(hash2)))
 
-
 class NLP_Pipeline:
-    def __init__(self, output_file_path='NLPOutput.txt'):
+    def __init__(self, output_file_path='NLPOutput.txt', limit=None):
         self.output_file_path = output_file_path
+        self.limit = limit
         self.initialize_file(self.output_file_path)
         self.data = self.fetch_db()
 
@@ -54,7 +55,7 @@ class NLP_Pipeline:
         except UnicodeEncodeError as e:
             print(f"UnicodeEncodeError: {e} for text: {text}")
 
-    def fetch_db(self, limit: int=None, 
+    def fetch_db(self,
                 auth = ('mseproject', 'tuebingen2024'), 
                 url = 'http://l.kremp-everest.nord:5000/query',
                 columns=["url", "title", "content"]) -> list[tuple]:
@@ -72,8 +73,8 @@ class NLP_Pipeline:
         # Construct the SELECT clause of the query
         columns_str = ', '.join(columns)
         query = f'SELECT {columns_str} FROM documents'
-        if limit is not None:
-            query += f' LIMIT {limit}'
+        if self.limit is not None:
+            query += f' LIMIT {self.limit}'
 
         try:
             response = requests.post(url, json={'query': query}, auth=auth)
@@ -106,7 +107,6 @@ class NLP_Pipeline:
     def deduplicate_soft(self, docs, similarity_threshold=0.95, simhash_threshold=2):
         content_map = defaultdict(list)
         dedup_docs = []
-        duplicates = []
         
         # extract lemmatized tokens from the preprocessed docs
         preprocessed_docs = [doc['lemmatized_tokens'] for doc in docs]
@@ -130,14 +130,13 @@ class NLP_Pipeline:
                         is_duplicate = True
                         doc['index'] = i
                         doc['similar_to'] = j
-                        duplicates.append(doc)
                         break
             
             if not is_duplicate:
                 dedup_docs.append(doc)
                 content_map[prep_doc].append(i)
         
-        return dedup_docs, duplicates
+        return dedup_docs
 
     def clean_html_content(self, html_content):
         try:
@@ -206,9 +205,12 @@ class NLP_Pipeline:
         # next process the documents with the NLP pipeline
         data = []
         for i in tqdm(range(len(self.data))):
-            text = self.data[i]['content']
-            language = self.detect_language(text)
-            tokens = self.remove_punctuation_and_tokenize(text)
+            content = self.data[i]['content']
+            cleaned_data = self.clean_html_content(content)['cleaned_content']
+            #language = self.detect_language(cleaned_data)
+            #if language != 'en':
+            #    continue
+            tokens = self.remove_punctuation_and_tokenize(cleaned_data)
             filtered_tokens = self.remove_stop_words(tokens)
             lemmatized_tokens = self.lemmatize_tokens(filtered_tokens)
             data.append({'title': self.data[i]['title'], 'url': self.data[i]['url'], 'tokens': lemmatized_tokens})
@@ -217,11 +219,11 @@ class NLP_Pipeline:
 
         # perform fuzzy duplicates deduplication using sim hash
         if deduplicate_soft:
-            self.data, duplicates = self.deduplicate_soft(self.data)
+            self.data = self.deduplicate_soft(self.data)
 
         # write the processed data to the output file
         for i in range(len(self.data)):
-            output = 'Title: '+ str(self.data[i]['title'])+ '\n' + 'URL: ' + str(self.data[i]['url'])+ '\n'+ 'Tokens: ' + ' '.join(lemmatized_tokens) + '\n'
+            output = 'Title: '+ str(self.data[i]['title'])+ '\n' + 'URL: ' + str(self.data[i]['url'])+ '\n'+ 'Tokens: ' + ' '.join(self.data[i]['tokens']) + '\n'
             self.append_to_file(output)
 
 # Example usage:
