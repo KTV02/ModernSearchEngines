@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from readability import Document
 from tqdm import tqdm
 from collections import Counter, defaultdict, OrderedDict
+import re
 
 # utility functions for soft deduplication
 def compute_simhash(words, num_bits=64):
@@ -105,6 +106,50 @@ class NLP_Pipeline:
                 doc['index'] = i
         
         return dedup_docs
+    
+    def filter_wikipedia_links(self):
+        """
+        Filter out Wikipedia URLs related to editing, templates, or forums from the data attribute.
+        """
+        if self.data is None:
+            return
+
+        filtered_data = []
+        for entry in self.data:
+            url = entry.get("url", "")
+            if not self.is_wikipedia_edit_or_forum(url):
+                filtered_data.append(entry)
+        
+        self.data = filtered_data
+
+    def is_wikipedia_edit_or_forum(self, url):
+        """
+        Check if a Wikipedia URL is related to editing, templates, forums, Help pages, or non-English Wikipedia sites.
+        Args:
+            url (str): The URL to check.
+        Returns:
+            bool: True if the URL is related to editing, templates, forums, Help pages, or non-English Wikipedia sites, False otherwise.
+        """
+        wiki_edit_patterns = [
+            r'/w/index.php',
+            r'/wiki/Talk:',
+            r'/wiki/Special:',
+            r'action=edit',
+            r'action=history',
+            r'action=info',
+            r'oldid=',
+            r'&action=',
+            r'/wiki/File:',
+            r'/wiki/Help:',
+        ]
+        # Check for non-English Wikipedia sites by their subdomains
+        non_english_wiki_pattern = re.compile(r'https://(?!en\.).*\.wikipedia\.org')
+        wikidata_pattern = re.compile(r'https://www\.wikidata\.org')
+        
+        return any(re.search(pattern, url) for pattern in wiki_edit_patterns) or \
+               non_english_wiki_pattern.search(url) or \
+               wikidata_pattern.search(url)
+
 
     def deduplicate_soft(self, docs, similarity_threshold=0.95, simhash_threshold=2):
         content_map = defaultdict(list)
@@ -203,6 +248,9 @@ class NLP_Pipeline:
 
         # deduplicate by hard matching content strings first
         self.data = self.deduplicate_hard(self.data)
+
+        # filter out Wikipedia links
+        self.filter_wikipedia_links()
 
         # next process the documents with the NLP pipeline
         data = []
