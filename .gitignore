@@ -4,7 +4,7 @@ data/shap.csv
 retriever/shap.csv
 webcrawler/index.db
 NLP/index.json
-
+NLP/NLPOutput.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
