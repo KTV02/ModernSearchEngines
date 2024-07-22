@@ -9,13 +9,14 @@ from langdetect import detect, LangDetectException
 from urllib.parse import urlparse, urlunparse, urljoin
 import logging
 
-# Initialize database connection
+# Specify local sqlite3 database to use
 DATABASE_URL = 'new.db'
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+#found by provided seed and google search
 initial_urls = [
     "https://www.tuebingen.de/en/",
     "https://www.eventbrite.de/d/germany--t%C3%BCbingen/events/",
@@ -32,14 +33,19 @@ initial_urls = [
     "https://www.germany.travel/en/cities-culture/tuebingen.html",
     "https://uni-tuebingen.de/en/forschung/zentren-und-institute/brasilien-und-lateinamerika-zentrum/german-brazilian-symposium-2024/about-tuebingen/welcome-to-tuebingen/"
 ]
-
+#one of these keywords has to be present for a page to meet the minimum relevancy requirements
 TUEBINGEN_KEYWORDS = ['tübingen', 'tubingen', 'tuebingen', 'tuebing', 'tübing', 't%c3%bcbingen']
+#Fake user agent to circumvent bot/crawling detection 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0"
+#amount of times to try to connect to a given website
 MAX_RETRIES = 3
+#time to wait between tries
 TIMEOUT = 10
-CONCURRENCY = 5  # Reduced concurrency for debugging
+CONCURRENCY = 5  # Increase concurrency depending on available ressources (processor cores/threads)
+#overly long pages can mess up the crawling process => limit size
 MAX_CONTENT_SIZE = 10 * 1024 * 1024  # 10 MB
 
+#setup the local database 
 def setup_database(api_url, drop_existing=False):
     conn = sqlite3.connect(api_url)
     cursor = conn.cursor()
@@ -47,13 +53,14 @@ def setup_database(api_url, drop_existing=False):
         cursor.execute("DROP TABLE IF EXISTS frontier")
         cursor.execute("DROP TABLE IF EXISTS documents")
         cursor.execute("DROP TABLE IF EXISTS sent_documents")
-
+#frontier contains all discovered urls, crawled and yet to be crawled
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS frontier (
         url TEXT PRIMARY KEY,
         crawled INTEGER DEFAULT 0,
         error INTEGER DEFAULT 0
     )''')
+#document table contains all documents chosen from frontier (using keywords and langdetect)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS documents (
         url TEXT PRIMARY KEY,
@@ -62,6 +69,7 @@ def setup_database(api_url, drop_existing=False):
         outgoing_links TEXT,
         timestamp TEXT
     )''')
+#creates table for sync script (with remote db) to remember progress
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS sent_documents (
         url TEXT PRIMARY KEY
@@ -69,6 +77,7 @@ def setup_database(api_url, drop_existing=False):
     conn.commit()
     conn.close()
 
+#fetch next url and log status
 async def fetch(session, url):
     headers = {"User-Agent": USER_AGENT}
     for _ in range(MAX_RETRIES):
@@ -85,30 +94,36 @@ async def fetch(session, url):
             logger.error(f"Error fetching {url}: {e}")
     return None, url
 
+#checks if content of given website is relevant by checking if content contains any of defined keywords
 def is_relevant(content):
     return any(keyword in content.lower() for keyword in TUEBINGEN_KEYWORDS)
 
+#checks if website is mostly in english
 def is_english(content):
     try:
         return detect(content) == 'en'
     except LangDetectException:
         return False
 
+#extracts the relevant content parts of the website 
 def extract_text_from_html(html):
     soup = BeautifulSoup(html, 'html.parser')
     text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'])
     text = ' '.join(element.get_text() for element in text_elements)
     return text
 
+#extract all links from the content for later adding to frontier
 def extract_links(html, base_url):
     soup = BeautifulSoup(html, 'html.parser')
     links = [urljoin(base_url, a.get('href')) for a in soup.find_all('a', href=True)]
     return links
-
+#normalize url to prevent multiple rows just differing by e.g. fragment identifier "#" in url 
 def normalize_url(url):
     parsed_url = urlparse(url)
     return urlunparse(parsed_url._replace(fragment=''))
 
+#Optional: Add SQL Wildcard exception for urls that should not be crawled
+#Usecases: 1. Media types that should not be included in index, 2. Exclude base domains that already dominate index too much
 def dont_crawl():
     return [
         '%wikipedia%',
@@ -117,11 +132,11 @@ def dont_crawl():
         '%.png%',
         '%.pdf%'
     ]
-
+#Crawling function
 async def crawl(url, session, db_url):
     conn = sqlite3.connect(db_url)
     cursor = conn.cursor()
-
+    #Normalizes url, fetches it and checks if it contains valid content => if not, add error notice
     normalized_url = normalize_url(url)
     html, fetched_url = await fetch(session, normalized_url)
     if not html:
@@ -129,16 +144,17 @@ async def crawl(url, session, db_url):
         conn.commit()
         conn.close()
         return
-
+    #makes sure that content is relevant and in english language
     text_content = extract_text_from_html(html)
     if is_english(text_content) and is_relevant(text_content):
         soup = BeautifulSoup(html, 'html.parser')
         title = soup.title.string if soup.title else ""
         timestamp = datetime.now().isoformat()
         links = extract_links(html, url)
-        
+        #inserts into document stable if it deemed relevant
         cursor.execute("INSERT OR REPLACE INTO documents (url, title, content, outgoing_links, timestamp) VALUES (?, ?, ?, ?, ?)",
                        (normalized_url, title, html, ','.join(links), timestamp))
+        #adds links of relevant websites to the frontier to be crawled at a later time
         for link in links:
             cursor.execute("INSERT OR IGNORE INTO frontier (url) VALUES (?)", (normalize_url(link),))
         logger.info(f"Added {normalized_url} to documents.")
@@ -146,10 +162,12 @@ async def crawl(url, session, db_url):
     conn.commit()
     conn.close()
 
+#Handles the asynchronous crawling process
 async def crawl_urls(session):
     while True:
         conn = sqlite3.connect(DATABASE_URL)
         cursor = conn.cursor()
+        #prevents urls that are excluded via sql wildcards to be fetched from the frontier
         exclude_conditions = " AND ".join([f"url NOT LIKE '{pattern}'" for pattern in dont_crawl()])
         query = f"SELECT url FROM frontier WHERE crawled = 0 AND error = 0 AND {exclude_conditions} LIMIT ?"
         cursor.execute(query, (CONCURRENCY,))
@@ -158,10 +176,10 @@ async def crawl_urls(session):
 
         if not urls_to_crawl:
             break
-
+        #distributes the next urls to crawl to the async workers
         tasks = [crawl(url, session, DATABASE_URL) for url in urls_to_crawl]
         await asyncio.gather(*tasks)
-
+        #prints overview over the current status of the index
         conn = sqlite3.connect(DATABASE_URL)
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM documents")
@@ -171,7 +189,9 @@ async def crawl_urls(session):
         conn.close()
         logger.info(f"Documents: {documents_count}, Frontier: {frontier_count}")
 
+#Starts the local webcrawling script 
 async def main():
+    #setup of the provided database structure if not already present
     setup_database(DATABASE_URL)
     
     conn = sqlite3.connect(DATABASE_URL)

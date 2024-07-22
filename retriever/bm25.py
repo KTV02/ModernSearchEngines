@@ -17,10 +17,11 @@ from tqdm import tqdm
 from multiprocessing import Pool
 from concurrent.futures import ThreadPoolExecutor
 import pickle
+from typing import Generator, Tuple, List
 
 
 class OurBM25:
-    def __init__(self, corpus, k1=1.2, b=0.75, num_threads=4):
+    def __init__(self, filepath, k1=1.2, b=0.75, num_threads=4):
         """
         Initialize BM25S with the given corpuses and parameters.
 
@@ -39,10 +40,10 @@ class OurBM25:
         self.k1 = k1
         self.b = b
         self.num_threads = num_threads
-        if not isinstance(corpus[0], list):
-            raise ValueError("Corpus is not tokenized properly.")
-        self.corpus = corpus
-        self.N = len(corpus)
+        self.corpus = list(self.parse_documents(filepath, "Tokens"))
+        if not self.corpus or not isinstance(self.corpus[0], list):
+            raise ValueError("Corpus is empty or not tokenized properly.")
+        self.N = len(self.corpus)
         self._initialize()
 
     def _initialize(self):
@@ -65,6 +66,28 @@ class OurBM25:
 
         # sum of all term frequencies divided by the number of documents
         self.avgdl = total_terms / self.N
+
+
+    def parse_documents(self, file_path: str, column_type: str) -> Generator[List[str], None, None]:
+        valid_column_types = {"Tokens", "Title", "URL"}
+        if column_type not in valid_column_types:
+            raise ValueError(f"Invalid column_type. Must be one of {valid_column_types}")
+
+        other_coltypes = valid_column_types - {column_type}
+
+        with open(file_path, 'r', encoding='utf-8') as file:
+            current_tokens = []
+            for line in file:
+                line = line.strip()
+                if line.startswith(f"{column_type}: "):
+                    if current_tokens:
+                        yield current_tokens
+                    current_tokens = line[len(f"{column_type}: "):].split()
+                elif not any(line.startswith(f"{coltype}: ") for coltype in other_coltypes):
+                    current_tokens.extend(line.split())
+            
+            if current_tokens:
+                yield current_tokens
 
     def get_corpus(self):
         return self.corpus
