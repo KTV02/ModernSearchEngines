@@ -3,7 +3,7 @@ retriever/bm25_cache_new.pkl
 data/shap.csv
 retriever/shap.csv
 webcrawler/index.db
-
+NLP/index.json
 
 
 # Byte-compiled / optimized / DLL files

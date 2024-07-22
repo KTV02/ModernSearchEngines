@@ -17,6 +17,8 @@ from compute_features import tokenize, PrecomputedDocumentFeatures
 import KeywordFilter as kwf
 from NLPPipeline import NLP_Pipeline
 import topicmodelling as tm
+from tqdm import tqdm
+import json
 import topicTree as tree
 
 app = Flask(__name__)
@@ -24,7 +26,7 @@ CORS(app)
 
 # Declare the global variables at the top
 retriever = None
-READ_INDEX = False
+READ_INDEX = True
 NLP_OUTPUT_PATH = "NLPOutput.txt"
 LOAD_BM25 = True
 BM25_PATH = "./retriever/bm25_cache.pkl"
@@ -227,20 +229,43 @@ def initialize_retriever():
 
 
 def query_db(columns: list, limit: int=None, auth=('mseproject', 'tuebingen2024'), url='http://l.kremp-everest.nord:5000/query') -> list[tuple]:
-    """is able to query the Database directly if there is no output from the actual NLPPipeline directly availiable"""
+    """This function stream loads the data of the index from a database to a local data object in memory.
+    is able to query the Database directly if there is no output from the actual NLPPipeline directly availiable.
+    
+    Returns in-memory data object of all the texts and urls."""
     columns_str = ', '.join(columns)
     query = f'SELECT {columns_str} FROM documents'
     if limit is not None:
         query += f' LIMIT {limit}'
+    
+    json_payload = {'query': query}
+    
     try:
-        response = requests.post(url, json={'query': query}, auth=auth)
+        response = requests.post(url, json=json_payload, auth=auth, stream=True)
         response.raise_for_status()
-        data = response.json()
+
+        total_size = int(response.headers.get('content-length', 0))
+        chunk_size = 1024  # Size of each chunk in bytes
+        data = []
+        output_file = "index.json"
+
+        with open(output_file, 'wb') as f:
+            with tqdm(total=total_size, unit='B', unit_scale=True, desc='Downloading', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]') as pbar:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        data.append(chunk)
+                        f.write(chunk)
+                        pbar.update(len(chunk))
+
+        data = b''.join(data).decode('utf-8')
+        data = json.loads(data)
+        
         if data:
             return data
         else:
             print("No data returned.")
             return None
+
     except requests.exceptions.RequestException as e:
         print(f"Error executing query: {e}")
         return None
