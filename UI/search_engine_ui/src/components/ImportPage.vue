@@ -12,9 +12,9 @@
       <div v-if="results.length" class="results">
         <h2>Results</h2>
         <div v-for="(result, index) in results" :key="index" class="result-item">
-          <h3>{{ result.query }}</h3>
-          <div v-for="(title, i) in result.relevantTitles" :key="i">
-            <a :href="result.relevantUrls[i]" target="_blank">{{ title }}</a>
+          <h3>Query {{ result.queryNumber }}</h3>
+          <div v-for="(res, i) in result.relevantResults" :key="i" class="result-detail">
+            <p>{{ res.rank }}. <a :href="res.url" target="_blank">{{ res.url }}</a> (Score: {{ res.score }})</p>
           </div>
         </div>
       </div>
@@ -32,65 +32,65 @@ export default {
     return {
       results: [],
       isLoading: false,
-      downloadUrl: null
+      downloadUrl: null,
+      errorMessage: ''
     };
   },
-  methods: {
-    async handleFileUpload(event) {
-      const file = event.target.files[0];
-      if (file) {
-        this.isLoading = true;
-        const formData = new FormData();
-        formData.append('file', file);
-        try {
-          const response = await axios.post('http://localhost:5000/rank_batch', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            },
-            responseType: 'blob' // Expect a blob response for the file
-          });
-          const blob = new Blob([response.data], { type: 'text/plain' });
-          this.downloadUrl = URL.createObjectURL(blob);
-          const resultsText = await blob.text();
-          this.results = this.processResults(resultsText);
-        } catch (error) {
-          console.error('Error uploading file:', error);
-        } finally {
-          this.isLoading = false;
-        }
-      }
-    },
-    processResults(text) {
-      const results = [];
-      const queries = text.split('\n\n'); // assuming each result is separated by double newlines
-      queries.forEach(query => {
-        const lines = query.split('\n');
-        if (lines.length > 1) {
-          const queryLine = lines[0].replace('Query: ', '');
-          const resultsLine = lines[1].replace('Results: ', '');
-          const relevantTitles = resultsLine.split(', ');
-          results.push({
-            query: queryLine,
-            relevantTitles: relevantTitles,
-            relevantUrls: relevantTitles.map(title => `http://example.com/${title.replace(' ', '_')}`) // Dummy URL
-          });
-        }
-      });
-      return results;
-    },
-    startAgain() {
-      this.results = [];
-      this.downloadUrl = null;
-      this.isLoading = false;
-      // Reset the file input value
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.value = null;
+methods: {
+  async handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (file) {
+      this.isLoading = true;
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const response = await axios.post('http://localhost:5000/rank_batch', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          },
+          responseType: 'blob' // Expect a blob response for the file
+        });
+        const blob = new Blob([response.data], { type: 'text/plain' });
+        this.downloadUrl = URL.createObjectURL(blob);
+        const resultsText = await blob.text();
+        this.results = this.processResults(resultsText);
+      } catch (error) {
+        this.errorMessage = 'Error uploading file. Please try again.';
+        console.error('Error uploading file:', error);
+      } finally {
+        this.isLoading = false;
       }
     }
+  },
+  processResults(text) {
+    const results = [];
+    const queries = text.trim().split('\n');
+    queries.forEach(query => {
+      const [queryNumber, rank, url, score] = query.split('\t');
+      const existingQuery = results.find(result => result.queryNumber === queryNumber);
+      if (existingQuery) {
+        existingQuery.relevantResults.push({ rank, url, score });
+      } else {
+        results.push({
+          queryNumber,
+          relevantResults: [{ rank, url, score }]
+        });
+      }
+    });
+    return results;
+  },
+  startAgain() {
+    this.results = [];
+    this.downloadUrl = null;
+    this.isLoading = false;
+    this.errorMessage = '';
+    if (this.$refs.fileInput) {
+      this.$refs.fileInput.value = null;
+    }
   }
+}
 };
 </script>
-
 
 <style scoped>
 .import-page {
@@ -118,18 +118,29 @@ export default {
   width: 80%;
   max-width: 800px;
   text-align: center;
+  color: #333; /* Ensure text color is visible */
+}
+
+h1, h2, h3 {
+  color: #333; /* Ensure heading text color is visible */
 }
 
 input[type="file"] {
   margin: 20px 0;
+  color: #333; /* Ensure file input text color is visible */
 }
 
-.download-link {
-  margin: 20px 0;
+.download-link a {
+  color: #007bff; /* Ensure link color is visible */
+}
+
+.download-link a:hover {
+  color: #0056b3;
 }
 
 .results {
   margin-top: 20px;
+  color: #333; /* Ensure results text color is visible */
 }
 
 .result-item {
