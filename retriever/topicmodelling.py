@@ -1,9 +1,12 @@
+#Performs topic modelling on the final output of the ranker 
+#Ouput of this is used in UI as final rank and for Topic modeling graph
+
 import pandas as pd
 import ast
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 
-# Function to flatten nested lists
+# Function to flatten nested lists of the output format of the ranker (content of webpages)
 def flatten_list(nested_list):
     flat_list = []
     for item in nested_list:
@@ -13,7 +16,7 @@ def flatten_list(nested_list):
             flat_list.append(item)
     return flat_list
 
-# Function to parse the text file and return a list of tuples
+# Function to parse output of the ranker and return a list of tuples(index,title,url,content,score)
 def parse_results(file_path):
     results = []
     with open(file_path, 'r') as file:
@@ -45,6 +48,7 @@ def parse_results(file_path):
     return results
 
 # Function to perform all calculations and store results
+#This performs the topic modeling and stores the results
 def perform_calculations(file_path):
     try:
         # Parse the results
@@ -104,11 +108,11 @@ def perform_calculations(file_path):
         print(f"An error occurred: {e}")
         return False
 
-# Function to get the 10 search results to display
+# Function to get the search results to display
 def get_search_results():
     return final_results
 
-# Function to get the 5 arrays for the topics
+# Function to get the 5 arrays for the 5 topics created
 def get_topic_arrays():
     selected_urls = set()
     topic_docs = []
@@ -126,7 +130,8 @@ def get_topic_arrays():
 
     return topic_arrays
 
-# Example usage
+
+#Example usage: Output of ranker in this case would be output.txt
 file_path = 'output.txt'
 if perform_calculations(file_path):
     search_results = get_search_results()

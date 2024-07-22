@@ -1,8 +1,11 @@
+#This script is used to get an overview of how diverse the current index is
+#Results show all different base-domains and how many times they appear
+
 import sqlite3
 from urllib.parse import urlparse
 from collections import Counter
 
-# Connect to the SQLite database
+# Provide path to db to analyze
 db_path = 'new.db'
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
