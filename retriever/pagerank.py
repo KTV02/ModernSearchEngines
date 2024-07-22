@@ -1,19 +1,8 @@
 import sqlite3
-import requests
-from bs4 import BeautifulSoup
-import datetime
-from langdetect import detect, LangDetectException
-from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urljoin, urlparse
-
-
-
-
-
-import sqlite3
 import numpy as np
 from tqdm import tqdm
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import eigs
 
 def get_web_graph(db_path):
     conn = sqlite3.connect(db_path)
@@ -34,34 +23,44 @@ def initialize_pagerank(urls):
     N = len(urls)
     pagerank = {url: 1/N for url in urls}
     return pagerank
-#100 already takes a long time on just 1000 urls
-def compute_pagerank(web_graph, damping_factor=0.85, max_iterations=10, tol=1.0e-6):
+
+def build_sparse_matrix(web_graph, urls):
+    N = len(urls)
+    url_index = {url: idx for idx, url in enumerate(urls)}
+
+    row_ind = []
+    col_ind = []
+    data = []
+
+    for url, outgoing_links in web_graph.items():
+        if outgoing_links:
+            src_idx = url_index[url]
+            for outgoing in outgoing_links:
+                if outgoing in url_index:
+                    dest_idx = url_index[outgoing]
+                    row_ind.append(dest_idx)
+                    col_ind.append(src_idx)
+                    data.append(1 / len(outgoing_links))
+
+    M = csr_matrix((data, (row_ind, col_ind)), shape=(N, N))
+    return M
+
+def compute_pagerank(web_graph, damping_factor=0.85, max_iterations=100, tol=1.0e-6):
     urls = list(web_graph.keys())
     N = len(urls)
-    pagerank = initialize_pagerank(urls)
-    new_pagerank = pagerank.copy()
-
+    M = build_sparse_matrix(web_graph, urls)
+    
+    # Initialize pagerank vector
+    pagerank = np.ones(N) / N
+    
     for iteration in tqdm(range(max_iterations), desc="Computing PageRank"):
-        for url in urls:
-            rank_sum = 0.0
-            for u in urls:
-                if url in web_graph[u]:
-                    rank_sum += pagerank[u] / len(web_graph[u])
-            new_pagerank[url] = (1 - damping_factor) / N + damping_factor * rank_sum
-
-        # Normalize the PageRank values
-        norm_factor = sum(new_pagerank.values())
-        for url in new_pagerank:
-            new_pagerank[url] /= norm_factor
-
-        # Check for convergence
-        if all(abs(new_pagerank[url] - pagerank[url]) < tol for url in urls):
+        new_pagerank = (1 - damping_factor) / N + damping_factor * M @ pagerank
+        if np.linalg.norm(new_pagerank - pagerank, ord=1) < tol:
             print(f"Converged after {iteration + 1} iterations.")
             break
-
-        pagerank = new_pagerank.copy()
-
-    return pagerank
+        pagerank = new_pagerank
+    
+    return {url: pagerank[idx] for url, idx in zip(urls, range(N))}
 
 def save_pagerank(db_path, pagerank):
     conn = sqlite3.connect(db_path)
@@ -76,7 +75,6 @@ def save_pagerank(db_path, pagerank):
         cursor.execute("UPDATE documents SET pagerank = ? WHERE url = ?", (rank, url))
     conn.commit()
     conn.close()
-
 
 def pagerank_statistics(db_name):
     conn = sqlite3.connect(db_name)
@@ -117,19 +115,27 @@ def pagerank_statistics(db_name):
 
     conn.close()
 
-
 def run_pagerank(db_path):
     web_graph = get_web_graph(db_path)
     pagerank = compute_pagerank(web_graph)
     save_pagerank(db_path, pagerank)
     print("PageRank values have been computed and stored in the database.")
 
+def get_pagerank(urls):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT url, pagerank FROM documents WHERE url IN ({seq})".format(
+        seq=','.join(['?']*len(urls))), urls)
+    rows = cursor.fetchall()
+    conn.close()
+    return {url: rank for url, rank in rows}
 
 db_path = 'index.db'
 run_pagerank(db_path)
 pagerank_statistics(db_path)
 
-
-
-
-
+# Example usage of get_pagerank
+urls_to_check = ['http://example.com/page1', 'http://example.com/page2']
+pagerank_scores = get_pagerank(urls_to_check)
+print("PageRank scores for specified URLs:")
+print(pagerank_scores)
