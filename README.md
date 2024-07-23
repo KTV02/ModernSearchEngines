@@ -3,6 +3,9 @@ ModernSearchEngines contains the code to the final project to the course Modern 
 
 ## Setup
 
+### Hardware Requirements
+We use a query enhancement process to get better results for the user input. The model used for query enhancement is [Gemma2](https://huggingface.co/docs/transformers/main/en/model_doc/gemma2) (9B parameters). Ensure that you match the hardware requirements (RAM) for local usage, if you want to utilize the query preprocessing.
+
 ### Dependencies
 The project is built using python for backend and NodeJS for frontend. The python dependencies are listed in `requirements.txt`.
 
