@@ -50,6 +50,9 @@ class OurBM25:
         print(self.N)
         self._initialize()
 
+    def get_N():
+        return self.N
+
     def _initialize(self):
         """
         Initialize the term frequency (TF) and inverse document frequency (IDF)
@@ -185,7 +188,7 @@ class OurBM25:
             if word in self.word_index:
                 word_idx = self.word_index[word]
                 idf = self.idf[word]
-                for doc_idx in range(self.N):
+                for doc_idx in range(self.N): # doc idx == N 
                     freq = self.tf[doc_idx, word_idx]
                     if freq == 0:
                         continue
@@ -208,7 +211,7 @@ class OurBM25:
 
         if self.num_threads > 1:
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-                results = list(tqdm(executor.map(topk_fn, query_tokens), total=len(query_tokens), desc="Scoring queries"))
+                results = list(tqdm(executor.map(topk_fn, query_tokens), total=len(query_tokens), desc="Scoring queries")) # for each query in query_tokens basically
         else:
             results = list(tqdm(map(topk_fn, query_tokens), total=len(query_tokens), desc="Scoring queries"))
 
@@ -297,19 +300,19 @@ if __name__ == "__main__":
     print(y)
 
     query_many = [["hello", "term"], ["hello", "foo"], ["hello", "ipsum"], ["hello", "long", "long"]]
-    x, y = bm25.retrieve(query_tokens=query_many, k=5, sorted=True)
-    print(x)
-    print(y)
+    np_scores, np_indices = bm25.retrieve(query_tokens=query_many, k=5, sorted=True)
+    print(np_scores)
+    print(np_indices)
 
     # Initialize a dictionary to hold the sums
     sum_dict = {i: 0 for i in range(5)}
 
     # Iterate over the score and index arrays to calculate sums
-    for i in range(x.shape[0]):
-        for j in range(x.shape[1]): # x and y have the same length
-            index = y[i, j]
-            sum_dict[index] += x[i, j]
-
+    for i in range(np_scores.shape[0]):
+        for j in range(np_scores.shape[1]): # x and y have the same length
+            index = np_indices[i, j]
+            sum_dict[index] += np_scores[i, j]
+    print(sum_dict)
     # Convert the sums to a list of tuples and sort them
     sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True)
 

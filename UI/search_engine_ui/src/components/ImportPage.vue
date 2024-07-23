@@ -36,59 +36,75 @@ export default {
       errorMessage: ''
     };
   },
-methods: {
-  async handleFileUpload(event) {
-    const file = event.target.files[0];
-    if (file) {
-      this.isLoading = true;
-      const formData = new FormData();
-      formData.append('file', file);
-      try {
-        const response = await axios.post('http://localhost:5000/rank_batch', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          },
-          responseType: 'blob' // Expect a blob response for the file
-        });
-        const blob = new Blob([response.data], { type: 'text/plain' });
-        this.downloadUrl = URL.createObjectURL(blob);
-        const resultsText = await blob.text();
-        this.results = this.processResults(resultsText);
-      } catch (error) {
-        this.errorMessage = 'Error uploading file. Please try again.';
-        console.error('Error uploading file:', error);
-      } finally {
-        this.isLoading = false;
+  methods: {
+    async handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (file) {
+        this.isLoading = true;
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const response = await axios.post('http://localhost:5000/rank_batch', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            },
+            responseType: 'blob' // Expect a blob response for the file
+          });
+          const blob = new Blob([response.data], { type: 'text/plain' });
+          this.downloadUrl = URL.createObjectURL(blob);
+          const resultsText = await blob.text();
+          this.results = this.processResults(resultsText);
+        } catch (error) {
+          this.errorMessage = 'Error uploading file. Please try again.';
+          console.error('Error uploading file:', error);
+        } finally {
+          this.isLoading = false;
+        }
       }
-    }
-  },
-  processResults(text) {
-    const results = [];
-    const queries = text.trim().split('\n');
-    queries.forEach(query => {
-      const [queryNumber, rank, url, score] = query.split('\t');
-      const existingQuery = results.find(result => result.queryNumber === queryNumber);
-      if (existingQuery) {
-        existingQuery.relevantResults.push({ rank, url, score });
-      } else {
-        results.push({
-          queryNumber,
-          relevantResults: [{ rank, url, score }]
-        });
+    },
+    processResults(text) {
+      const results = [];
+      const queries = text.trim().split('\n');
+      queries.forEach(query => {
+        const parts = query.split('\t');
+        if (parts.length < 4) {
+          console.error(`Skipping malformed line: ${query}`);
+          return;
+        }
+        const [queryNumber, rank, url, scoreStr] = parts;
+        let score;
+        try {
+          score = parseFloat(scoreStr);
+        } catch (error) {
+          console.error(`Skipping malformed score: ${scoreStr} for query ${query}`);
+          return;
+        }
+        if (isNaN(score)) {
+          console.error(`Skipping malformed score: ${scoreStr} for query ${query}`);
+          return;
+        }
+        const existingQuery = results.find(result => result.queryNumber === queryNumber);
+        if (existingQuery) {
+          existingQuery.relevantResults.push({ rank, url, score });
+        } else {
+          results.push({
+            queryNumber,
+            relevantResults: [{ rank, url, score }]
+          });
+        }
+      });
+      return results;
+    },
+    startAgain() {
+      this.results = [];
+      this.downloadUrl = null;
+      this.isLoading = false;
+      this.errorMessage = '';
+      if (this.$refs.fileInput) {
+        this.$refs.fileInput.value = null;
       }
-    });
-    return results;
-  },
-  startAgain() {
-    this.results = [];
-    this.downloadUrl = null;
-    this.isLoading = false;
-    this.errorMessage = '';
-    if (this.$refs.fileInput) {
-      this.$refs.fileInput.value = null;
     }
   }
-}
 };
 </script>
 
