@@ -55,6 +55,32 @@ urls = []
 corpus = []
 topicArray = []
 
+@app.route('/upload_queries', methods=['POST'])
+def upload_queries():
+    """Uploads a batch file of queries and returns query IDs"""
+    file = request.files['file']
+    lines = file.read().decode('utf-8').splitlines()
+    queries = []
+    for line in lines:
+        try:
+            query_number, query = line.split('\t', 1)
+            queries.append({'query_number': query_number, 'query': query})
+        except ValueError:
+            print(f"Skipping malformed line: {line}")
+    return jsonify({'queries': queries})
+
+@app.route('/combine_results', methods=['POST'])
+def combine_results():
+    """Combines results from multiple queries into a single file"""
+    data = request.json
+    results = data.get('results')
+    output = io.StringIO()
+    for result in results:
+        query_number = result['query_number']
+        for rank, (title, url, score) in enumerate(zip(result['relevantTitles'], result['relevantUrls'], result['relevanceScores']), start=1):
+            output.write(f"{query_number}\t{rank}\t{url}\t{score}\n")
+    output.seek(0)
+    return send_file(io.BytesIO(output.getvalue().encode('utf-8')), mimetype='text/plain', as_attachment=True, download_name='processed_file.txt')
 
 @app.route('/rank_batch', methods=['POST'])
 def rank_batch():
@@ -74,6 +100,7 @@ def rank_batch():
             continue
 
         relevantTitles, relevantUrls, relevanceScores = retrieval(query)
+        print(relevantUrls)
         for rank, (title, url, score) in enumerate(zip(relevantTitles, relevantUrls, relevanceScores), start=1):
             try:
                 # Ensure the score is a float
@@ -87,8 +114,7 @@ def rank_batch():
 
     # Debug log the output content before returning
     output_content = output.getvalue()
-    print("Output content:\n", output_content)
-
+    print(output_content)
     # Ensure we reset the buffer position
     output.seek(0)
     
@@ -103,8 +129,9 @@ def rank():
     """retrieves documents for the query passen by the user via the UI"""
     data = request.json
     query = data.get('query')
-    relevantTitles, relevantUrls, _ = retrieval(query)
-    return jsonify({'relevantTitles': relevantTitles, 'relevantUrls': relevantUrls})
+    print(query)
+    relevantTitles, relevantUrls, scores = retrieval(query)
+    return jsonify({'relevantTitles': relevantTitles, 'relevantUrls': relevantUrls, 'relevantScores': scores})
 
 
 @app.route('/get_links', methods=['GET'])
@@ -188,6 +215,8 @@ def retrieval(query, k=100):
     global urls
     global topicArray
 
+    total_start_time = time.time()
+
     if not retriever:
         print('ohoh')
         return jsonify({'error': 'Retriever not yet initialized'}), 500
@@ -251,7 +280,7 @@ def retrieval(query, k=100):
             relevantUrls.append(urls[top_indices[index]])
             relevantContent.append(corpus[top_indices[index]])
         print(len(relevantTitles)) # k
-        print(len(relevantUrls)) # k 
+        print(relevantUrls) # k 
         print(len(relevantContent)) # k 
         print(f"+-------- {XGB_TOP_K} results in {total_time:.2f} seconds (BM25: {bm25_time:.2f}s + XGBoost: {xgb_time:.2f}s) --------+")
         topicModelingOutput = []
@@ -282,6 +311,12 @@ def retrieval(query, k=100):
         relevantUrls = list(searchResults["url"])
         accuracy = list(searchResults["accuracy"])
         topicArray = tm.get_topic_arrays()
+
+        total_end_time = time.time()
+        total_time = total_end_time - total_start_time
+        print(f"+-------- XXXX {XGB_TOP_K} results in {total_time:.2f} seconds XXXX --------+")
+
+
         return relevantTitles, relevantUrls, accuracy
     else:
         print(f"+-------- {k} results in {bm25_time:.2f} seconds using BM25 --------+")

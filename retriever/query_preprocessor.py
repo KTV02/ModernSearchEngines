@@ -45,7 +45,7 @@ class QueryPreprocessor:
                 output_parser = CommaSeparatedListOutputParser()
                 format_instructions = output_parser.get_format_instructions()
                 prompt = PromptTemplate(
-                    template="Rephrase this search engines query 8 times, without changing the meaning: {query}. Queries must be city of Tübingen related and only output the queries without explanation.\n{format_instructions}",
+                    template="Rephrase this search engines query 4 times, without changing the meaning: {query}. Queries must be city of Tübingen related and only output the queries without explanation.\n{format_instructions}",
                     input_variables=["query"],
                     partial_variables={"format_instructions": format_instructions},
                 )

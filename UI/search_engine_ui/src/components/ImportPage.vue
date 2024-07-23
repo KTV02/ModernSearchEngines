@@ -44,22 +44,54 @@ export default {
         const formData = new FormData();
         formData.append('file', file);
         try {
-          const response = await axios.post('http://localhost:5000/rank_batch', formData, {
+          const response = await axios.post('http://localhost:5000/upload_queries', formData, {
             headers: {
               'Content-Type': 'multipart/form-data'
-            },
-            responseType: 'blob' // Expect a blob response for the file
+            }
           });
-          const blob = new Blob([response.data], { type: 'text/plain' });
-          this.downloadUrl = URL.createObjectURL(blob);
-          const resultsText = await blob.text();
-          this.results = this.processResults(resultsText);
+          const queries = response.data.queries;
+          await this.processQueries(queries);
         } catch (error) {
           this.errorMessage = 'Error uploading file. Please try again.';
           console.error('Error uploading file:', error);
         } finally {
           this.isLoading = false;
         }
+      }
+    },
+    async processQueries(queries) {
+      const promises = queries.map(query => {
+        return axios.post('http://localhost:5000/rank', {
+          query: query.query
+        })
+        .then(response => ({
+          query_number: query.query_number,
+          relevantTitles: response.data.relevantTitles,
+          relevantUrls: response.data.relevantUrls,
+          relevanceScores: response.data.relevantScores
+        }))
+        .catch(error => {
+          console.error(`Error processing query ${query.query_number}:`, error);
+          return null;
+        });
+      });
+
+      const results = await Promise.all(promises);
+      const filteredResults = results.filter(result => result !== null);
+      await this.combineResults(filteredResults);
+    },
+    async combineResults(results) {
+      try {
+        const response = await axios.post('http://localhost:5000/combine_results', { results }, {
+          responseType: 'blob' // Expect a blob response for the file
+        });
+        const blob = new Blob([response.data], { type: 'text/plain' });
+        this.downloadUrl = URL.createObjectURL(blob);
+        const resultsText = await blob.text();
+        this.results = this.processResults(resultsText);
+      } catch (error) {
+        this.errorMessage = 'Error combining results. Please try again.';
+        console.error('Error combining results:', error);
       }
     },
     processResults(text) {
@@ -72,13 +104,7 @@ export default {
           return;
         }
         const [queryNumber, rank, url, scoreStr] = parts;
-        let score;
-        try {
-          score = parseFloat(scoreStr);
-        } catch (error) {
-          console.error(`Skipping malformed score: ${scoreStr} for query ${query}`);
-          return;
-        }
+        let score = parseFloat(scoreStr);
         if (isNaN(score)) {
           console.error(`Skipping malformed score: ${scoreStr} for query ${query}`);
           return;
