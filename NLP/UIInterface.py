@@ -1,6 +1,7 @@
 import sys
 import os
 import io
+import csv
 import time
 import requests
 sys.path.append(os.path.abspath('../retriever'))
@@ -46,7 +47,7 @@ SAVE_MODEL_BM25 = True
 OLLAMA_AVAILABLE = True
 
 # XGB_TOP_K: How many samples XGB Booster should return.
-XGB_TOP_K = 50
+XGB_TOP_K = 100
 # USE_XGB: Whether to use XGB or stick to BM25.
 USE_XGB = True
 titles = []
@@ -57,22 +58,45 @@ topicArray = []
 
 @app.route('/rank_batch', methods=['POST'])
 def rank_batch():
-    """retrieves documents for a batch file of queries
-        passed via the import function of the UI"""
+    """Retrieves documents for a batch file of queries passed via the import function of the UI"""
     file = request.files['file']
     lines = file.read().decode('utf-8').splitlines()
+    print(lines)
     results = []
     output = io.StringIO()
-    
+
     for line in lines:
-        query_number, query = line.split('\t', 1)
+        try:
+            query_number, query = line.split('\t', 1)
+        except ValueError:
+            # Log the error and continue to the next line
+            print(f"Skipping malformed line: {line}")
+            continue
+
         relevantTitles, relevantUrls, relevanceScores = retrieval(query)
         for rank, (title, url, score) in enumerate(zip(relevantTitles, relevantUrls, relevanceScores), start=1):
-            output.write(f"{query_number}\t{rank}\t{url}\t{score}\n")
-    
-    output.seek(0)
-    return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/plain', as_attachment=True, download_name='processed_file.txt')
+            try:
+                # Ensure the score is a float
+                score = float(score)
+            except ValueError:
+                # Log the error and continue to the next result
+                print(f"Skipping malformed score: {score} for query {query}")
+                continue
 
+            output.write(f"{query_number}\t{rank}\t{url}\t{score}\n")
+
+    # Debug log the output content before returning
+    output_content = output.getvalue()
+    print("Output content:\n", output_content)
+
+    # Ensure we reset the buffer position
+    output.seek(0)
+    
+    try:
+        return send_file(io.BytesIO(output_content.encode('utf-8')), mimetype='text/plain', as_attachment=True, download_name='processed_file.txt')
+    except Exception as e:
+        print(f"Error sending file: {e}")
+        return "Internal Server Error", 500
 
 @app.route('/rank', methods=['POST'])
 def rank():
@@ -105,70 +129,51 @@ def get_domain(url):
     return parsed_url.netloc
 
 # scores - contents are only top 50 
-def check_and_adjust_results(documents, scores, titles, urls, contents, corpus, sorted_indices, top_indices, sorted_sums_values, k, global_urls, global_titles, threshold=0.7):
+def check_and_adjust_results(documents, scores, urls, global_urls, global_titles, k=100, threshold=0.7):
     """Check domain threshold and adjust results by cutting and filling documents."""
-    # Step 1: Identify Domains
     domain_count = defaultdict(int)
     for url in urls:
-        domain = get_domain(url)
-        domain_count[domain] += 1
+        domain_count[get_domain(url)] += 1
 
-    # Step 2: Check Threshold
     total_documents = len(urls)
     max_domain, max_count = max(domain_count.items(), key=lambda item: item[1])
     domain_percentage = max_count / total_documents
-    print(f"Domain Percentage: {domain_percentage}")
 
     if domain_percentage >= threshold:
-        print(max_domain)
-        dominant_domain = max_domain
-        # Identify documents from the dominant domain
         dominant_domain_indices = [i for i, url in enumerate(urls) if get_domain(url) == max_domain]
-        print("This is how many documents there are from this website")
-        print(len(dominant_domain_indices))
-        
-        # Sort the dominant domain indices by their scores
         dominant_domain_indices_sorted = sorted(dominant_domain_indices, key=lambda i: scores[i])
-        print(len(dominant_domain_indices_sorted))
-        
-        # Calculate the number of documents to remove
         num_to_cut = len(dominant_domain_indices_sorted) // 2
-        print(num_to_cut)
-        
-        # Remove the lowest 50% scores from the dominant domain
         indices_to_remove = dominant_domain_indices_sorted[:num_to_cut]
-        print(indices_to_remove)
-        
-        # Create a set for quick lookup of indices to remove
         indices_to_remove_set = set(indices_to_remove)
-        print(indices_to_remove_set)
-        
-        # Retain the top indices excluding the ones to be removed
-        retained_indices = [i for i in top_indices if i not in indices_to_remove_set]
-        print("Retained:")
-        print(len(retained_indices))
-        
-        # Ensure we still have k items by adding more from the sorted_indices
+        retained_indices = [i for i in range(len(urls)) if i not in indices_to_remove_set]
+
         additional_needed = k - len(retained_indices)
         additional_indices = [
-            i for i in sorted_indices 
-            if i not in retained_indices and get_domain(global_urls[i]) != dominant_domain
+            i for i in range(len(global_urls)) 
+            if i not in retained_indices and get_domain(global_urls[i]) != max_domain
         ]
         retained_indices += additional_indices[:additional_needed]
-        documents= []
-        relevantTitlesBM25 = []
-        relevantUrlsBM25 = []
-        relevantContentBM25 = []
-        for index in retained_indices:
-            documents.append({"body": " ".join(corpus[index]), "title": global_titles[index], "url": global_urls[index]})
-            relevantTitlesBM25.append(global_titles[index])
-            relevantUrlsBM25.append(global_urls[index])
-            relevantContentBM25.append(corpus[index])
 
-        return documents, relevantContentBM25, relevantTitlesBM25, relevantUrlsBM25
+        documents, relevant_content, relevant_titles, relevant_urls = extract_relevant_docs(retained_indices, global_titles, global_urls)
 
-    return documents, contents, titles, urls
+        return documents, relevant_content, relevant_titles, relevant_urls
 
+    return documents, [doc['body'] for doc in documents], [doc['title'] for doc in documents], urls
+
+
+def extract_relevant_docs(indices, global_titles, global_urls, sum_dict=None):
+    """Extract relevant documents, titles, urls, and scores based on given indices."""
+    documents = []
+    scores = []
+    relevant_titles = []
+    relevant_urls = []
+    for index in indices:
+        documents.append({"body": " ".join(corpus[index]), "title": global_titles[index], "url": global_urls[index]})
+        relevant_titles.append(global_titles[index])
+        relevant_urls.append(global_urls[index])
+        if sum_dict:
+            scores.append(sum_dict[index])
+    return documents, scores, relevant_titles, relevant_urls
 
 def retrieval(query, k=100):
     """retrieves k documents for query with BM25 and reranks the results with XGBoost,
@@ -194,15 +199,18 @@ def retrieval(query, k=100):
     print("Retrieving results...")
     start_bm25 = time.time()
     x_scores, y_indices = retriever.retrieve(tok_query, k=k, sorted=True)
+    #print(x_scores)
+    #print(y_indices)
     bm25_time = time.time() - start_bm25
-    sum_dict = {i: 0 for i in range(len(corpus))} # Sum the scores of multiple queries here up
+    sum_dict = {i: 0 for i in range(len(corpus))} # Sum the scores of multiple queries here up 
+    # print(sum_dict) print all the indices 
 
     # Iterate over the score and index arrays to calculate sums (for multiple queries)
     for i in range(x_scores.shape[0]):
         for j in range(x_scores.shape[1]):
             index = y_indices[i, j]
             sum_dict[index] += x_scores[i, j]  # get the score from x at the exact position
-
+    #print(sum_dict)
     sorted_sums = sorted(sum_dict.items(), key=lambda item: item[1], reverse=True) # sort to have the highest scores [1] up
     sorted_indices = [item[0] for item in sorted_sums] # get the indices (OF THE INDEX) in a list
     sorted_sums_values = [item[1] for item in sorted_sums] # get the values in a list
@@ -210,17 +218,11 @@ def retrieval(query, k=100):
     top_indices = sorted_indices[:top_n] # cut out the other parts. Here we could get new data prior from.
 
     # For further processing in XGBoost we need these values from the BM25 output:
-    documents = []
-    relevantTitlesBM25 = []
-    relevantUrlsBM25 = []
-    relevantContentBM25 = []
-    scores = []
-    for index in top_indices:
-        documents.append({"body": " ".join(corpus[index]), "title": titles[index], "url": urls[index]})
-        relevantTitlesBM25.append(titles[index])
-        relevantUrlsBM25.append(urls[index])
-        relevantContentBM25.append(corpus[index])
-        scores.append(sum_dict[index])  # Add the corresponding score
+    documents, scores, relevant_titles, relevant_urls = extract_relevant_docs(top_indices, titles, urls, sum_dict)
+
+    #documents, relevant_content, relevant_titles, relevant_urls = check_and_adjust_results(
+    #    documents, scores, relevant_urls, urls, titles, k=k
+    #)
 
     #print(relevantUrlsBM25[:15])
 
@@ -248,20 +250,33 @@ def retrieval(query, k=100):
             relevantTitles.append(titles[top_indices[index]])
             relevantUrls.append(urls[top_indices[index]])
             relevantContent.append(corpus[top_indices[index]])
+        print(len(relevantTitles)) # k
+        print(len(relevantUrls)) # k 
+        print(len(relevantContent)) # k 
         print(f"+-------- {XGB_TOP_K} results in {total_time:.2f} seconds (BM25: {bm25_time:.2f}s + XGBoost: {xgb_time:.2f}s) --------+")
         topicModelingOutput = []
         for i in range(XGB_TOP_K):
             topicModelingOutput.append([i, relevantTitles[i], relevantUrls[i], relevantContent[i], y_pred[i]])
         try:
-            #write results of XGBoost in file to be processed by topic modeling
-            with open("topicmodelingoutput.txt", 'w') as file:
+            # Write results of XGBoost in file to be processed by topic modeling
+            with open("topicmodelingoutput.txt", 'w', encoding='utf-8') as file:
                 file.write("")
-            with open("topicmodelingoutput.txt", 'a', encoding='utf-8', errors='replace') as file:
+            with open("topicmodelingoutput.txt", 'w', encoding='utf-8', newline='') as file:
+                writer = csv.writer(file, delimiter='|') # fix the issue of commas being also in input and therefore misinterpretation
                 for sentence in topicModelingOutput:
-                    file.write(str(sentence) + "\n")
+                    writer.writerow(sentence)
+            #with open("topicmodelingoutput.txt", 'a', encoding='utf-8', errors='replace') as file:
+            #    for sentence in topicModelingOutput:
+            #        file.write(str(sentence) + "\n")
         except UnicodeEncodeError as e:
-            print(f"UnicodeEncodeError: {e} for text: {text}")
-        print(tm.perform_calculations("topicmodelingoutput.txt"))
+            print(f"UnicodeEncodeError: {e} for text: {sentence}")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+        try:
+            print(tm.perform_calculations("topicmodelingoutput.txt"))
+        except Exception as e:
+            print(f"Error in topic modeling calculations: {e}")
         searchResults = tm.get_search_results()
         relevantTitles = list(searchResults["title"])
         relevantUrls = list(searchResults["url"])

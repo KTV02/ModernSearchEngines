@@ -7,7 +7,7 @@
 
 # 70% of score based on ranker score and 30 % based on diversity score
 diversification_alpha = 0.7
-
+import csv
 import pandas as pd
 import ast
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -23,40 +23,27 @@ def flatten_list(nested_list):
             flat_list.append(item)
     return flat_list
 
-# Function to parse output of the ranker and return a list of tuples(index,title,url,content,score)
 def parse_results(file_path):
     results = []
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-        for line in file:
-            line = line.strip()
-            if line:
-                # Find the position of the last comma to split content and accuracy
-                last_comma_index = line.rfind(',')
-                if last_comma_index == -1:
-                    continue
-
-                # Extract the part before the last comma
-                prefix = line[:last_comma_index]
-
-                # Extract the accuracy part
-                accuracy_part = line[last_comma_index + 1:].strip().strip('[]')
+        reader = csv.reader(file, delimiter='|')
+        for row in reader:
+            try:
+                index = int(row[0])
+                title = row[1]
+                url = row[2]
+                content_list = ast.literal_eval(row[3])
+                accuracy = float(row[4])
                 
-                # Split the prefix into components
-                prefix_parts = prefix.split(', ', 3)  # Split the prefix into 4 parts: Index, Title, Url, Content
-                
-                index = int(prefix_parts[0].strip('['))
-                title = prefix_parts[1].strip("'")
-                url = prefix_parts[2].strip("'")
-                try:
-                    content_list = ast.literal_eval(prefix_parts[3])
-                except SyntaxError as e:
-                    print(f"Syntax error when parsing content: {e}")
-                    continue
                 flat_content_list = flatten_list(content_list)  # Flatten nested lists
                 content = ' '.join(flat_content_list)  # Combine content parts
-                accuracy = float(accuracy_part)
+
                 results.append((index, title, url, content, accuracy))
+            except (ValueError, SyntaxError) as e:
+                print(f"Error parsing row: {row} - Error: {e}")
+                continue
     return results
+
 
 # Function to perform all calculations and store results
 # This performs the topic modeling and stores the results
