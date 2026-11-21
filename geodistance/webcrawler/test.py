@@ -1,3 +1,4 @@
+import os
 import requests
 
 # Use the internal IP address of your Raspberry Pi
@@ -5,7 +6,7 @@ url = 'http://your-db-host:5000/query'
 query = 'SELECT Count(*) FROM frontier where crawled=1'
 
 # Basic authentication details
-auth = ('mseproject', '***REMOVED***')
+auth = ('mseproject', os.environ.get('MSE_DB_PASSWORD', ''))
 
 # Make the POST request to the Flask API with the query
 response = requests.post(url, json={'query': query}, auth=auth)

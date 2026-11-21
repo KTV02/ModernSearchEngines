@@ -9,7 +9,7 @@ from requests.auth import HTTPBasicAuth
 LOCAL_DB_PATH = 'new.db'  # Update this with the path to your local database
 REMOTE_DB_URL = 'http://your-db-host:5000/query'
 SYNC_FILE_PATH = 'sync_status.json'
-AUTH = ('mseproject', '***REMOVED***')  # Update this with your actual username and password
+AUTH = ('mseproject', os.environ.get('MSE_DB_PASSWORD', ''))  # Update this with your actual username and password
 BATCH_SIZE = 100  # Number of records to send in each batch
 RETRY_COUNT = 5  # Number of retries for database access
 RETRY_DELAY = 5  # Delay between retries in seconds

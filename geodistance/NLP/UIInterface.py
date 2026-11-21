@@ -176,7 +176,7 @@ def initialize_retriever():
             print("BM25 model saved to cache.")
         print("BM25 model created.")
 
-def query_db(columns: list, limit: int=None, auth = ('mseproject', '***REMOVED***'), url = 'http://your-db-host:5000/query') -> list[tuple]:
+def query_db(columns: list, limit: int=None, auth = ('mseproject', os.environ.get('MSE_DB_PASSWORD', '')), url = 'http://your-db-host:5000/query') -> list[tuple]:
     """
     Query the database to select specified columns with an optional limit.
     Args:

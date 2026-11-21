@@ -18,6 +18,7 @@
 Its best to use the hostname, because this will stay the same for every team member 
 
 ```python
+import os
 import requests
 
 # Here instead of hostname you can also use the ip adresse Displayed in NordVPN
@@ -28,7 +29,7 @@ url = 'http://your-db-host:5000/query'
 query = 'SELECT COUNT(*) AS count FROM documents'
 
 # Basic authentication details
-auth = ('mseproject', '***REMOVED***')
+auth = ('mseproject', os.environ['MSE_DB_PASSWORD'])  # set MSE_DB_PASSWORD in your environment
 
 # Make the POST request to the Flask API with your query
 response = requests.post(url, json={'query': query}, auth=auth)

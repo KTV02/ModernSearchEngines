@@ -14,7 +14,7 @@ REMOTE_DB_URL = 'http://your-db-host:5000/query'
 #like we set it up is not accessible from the internet, but only if you are in the local network
 #This was achieved using the free meshnet functionality provided by nordvpn
 #This is also possible using a standard VPN into the local network 
-AUTH = ('mseproject', '***REMOVED***')  # username and password for remote database
+AUTH = ('mseproject', os.environ.get('MSE_DB_PASSWORD', ''))  # username and password for remote database
 
 
 BATCH_SIZE = 100  # Number of records to send in each batch

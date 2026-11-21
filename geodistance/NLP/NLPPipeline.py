@@ -1,3 +1,4 @@
+import os
 import string
 import requests
 from langdetect import detect
@@ -55,7 +56,7 @@ class NLP_Pipeline:
             print(f"UnicodeEncodeError: {e} for text: {text}")
 
     def fetch_db(self, limit: int=None, 
-                auth = ('mseproject', '***REMOVED***'), 
+                auth = ('mseproject', os.environ.get('MSE_DB_PASSWORD', '')), 
                 url = 'http://your-db-host:5000/query',
                 columns=["url", "title", "content"]) -> list[tuple]:
         """
