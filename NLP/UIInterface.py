@@ -396,7 +396,7 @@ def initialize_retriever():
     embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L12-v2')
 
 
-def query_db(columns: list, limit: int=None, auth=('mseproject', '***REMOVED***'), url='http://your-db-host:5000/query') -> list[tuple]:
+def query_db(columns: list, limit: int=None, auth=('mseproject', os.environ.get('MSE_DB_PASSWORD', '')), url='http://your-db-host:5000/query') -> list[tuple]:
     """This function stream loads the data of the index from a database to a local data object in memory.
     is able to query the Database directly if there is no output from the actual NLPPipeline directly availiable.
     

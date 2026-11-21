@@ -1,4 +1,5 @@
 # This Python file uses the following encoding: utf-8
+import os
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
@@ -59,7 +60,7 @@ def execute_query(api_url, query, params=None):
     payload = {'query': query}
     if params:
         payload['params'] = params
-    response = requests.post(url, json=payload, auth=('mseproject', '***REMOVED***'))
+    response = requests.post(url, json=payload, auth=('mseproject', os.environ.get('MSE_DB_PASSWORD', '')))
     if response.status_code == 200:
         return response.json()
     else:
